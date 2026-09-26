@@ -1,0 +1,1227 @@
+{
+  "name": "Agente Tutor",
+  "nodes": [
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates?timeout=0&allowed_updates=[\"message\"]",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -448,
+        -144
+      ],
+      "id": "8495f63f-acde-4197-a95f-9f7785c25413",
+      "name": "Telegram getUpdates",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "seconds",
+              "secondsInterval": 5
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        -672,
+        -144
+      ],
+      "id": "4582a9d0-05a2-4ee0-a0c2-0d5bf6e856cc",
+      "name": "Polling Timer"
+    },
+    {
+      "parameters": {
+        "jsCode": "const respuesta = $input.first().json;\nconst updates = respuesta.result || [];\n\nif (updates.length === 0) {\n  return [];\n}\n\nconst ultimo_update_id = updates[updates.length - 1].update_id;\n\nconst items = [];\nfor (const update of updates) {\n  if (update.message) {\n    items.push({\n      json: {\n        message: update.message,\n        ultimo_update_id: ultimo_update_id\n      }\n    });\n  }\n}\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -224,
+        -144
+      ],
+      "id": "87250b66-cfc5-4709-a83f-d1ee4eef6359",
+      "name": "Procesar Updates"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates?offset={{ $json.ultimo_update_id + 1 }}&limit=1",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        0,
+        -144
+      ],
+      "id": "a5c2b71d-4735-41b6-ba91-00d3370840d4",
+      "name": "Confirmar Offset"
+    },
+    {
+      "parameters": {
+        "jsCode": "const mensaje = $('Procesar Updates').first().json.message;\n\nconst chat_id = mensaje.chat.id;\nconst texto = mensaje.text || mensaje.caption || \"\";\nconst nombre_usuario = mensaje.from.first_name || \"Usuario\";\n\nlet tiene_archivo = false;\nlet file_id = \"\";\nlet nombre_archivo = \"\";\n\nif (mensaje.document) {\n  tiene_archivo = true;\n  file_id = mensaje.document.file_id;\n  nombre_archivo = mensaje.document.file_name || \"documento\";\n}\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    texto_usuario: texto,\n    nombre_usuario: nombre_usuario,\n    tiene_archivo: tiene_archivo,\n    file_id: file_id,\n    nombre_archivo: nombre_archivo\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        -144
+      ],
+      "id": "e9aaf3c4-1a59-466b-a94e-cd5d3e4710fb",
+      "name": "Extraer Info Mensaje"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "⏳ Procesando tu solicitud...",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        448,
+        -240
+      ],
+      "id": "70c684b8-06e1-4cbe-8d65-f667a9db161c",
+      "name": "Send a text message"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "a5078d86-01fe-424b-b6ec-e5ebf5457f30",
+              "leftValue": "={{ $json.tiene_archivo }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        -48
+      ],
+      "id": "58f7f27b-3e74-4d53-a406-d4271c1d3453",
+      "name": "Tiene Archivo"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getFile?file_id={{ $('Extraer Info Mensaje').first().json.file_id }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        720,
+        -144
+      ],
+      "id": "72e9c221-1997-4287-b52c-a0c42bb0e0f7",
+      "name": "Telegram getFile"
+    },
+    {
+      "parameters": {
+        "url": "=https://api.telegram.org/file/bot{{ $env.TELEGRAM_BOT_TOKEN }}/{{ $json.result.file_path }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        896,
+        -144
+      ],
+      "id": "03eaff9f-d889-4ca6-9125-73c047304fde",
+      "name": "Descargar Archivo",
+      "alwaysOutputData": false,
+      "executeOnce": false,
+      "retryOnFail": false,
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const texto_usuario = $('Extraer Info Mensaje').first().json.texto_usuario;\nconst nombre_archivo = $('Extraer Info Mensaje').first().json.nombre_archivo;\n\nconst nombre_limpio = nombre_archivo\n  .replace(/\\.pdf$/i, \"\")\n  .replace(/[_-]/g, \" \");\n\nconst texto_para_rag = texto_usuario + \" \" + nombre_limpio + \" contenido temas ejercicios definiciones\";\n\nreturn [{\n  json: {\n    texto_para_rag: texto_para_rag,\n    texto_usuario: texto_usuario + ` [Archivo adjunto: ${nombre_archivo}]`,\n    archivo_descargado: true\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        -144
+      ],
+      "id": "fa10aa19-fb1e-48d6-ba04-a6d539344576",
+      "name": "Procesar Archivo"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1344,
+        -48
+      ],
+      "id": "2c06d2cf-7e97-438d-8b45-96d33b04fa36",
+      "name": "Unir Ramas Archivo"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst datos = items[0].json;\n\nlet texto_para_rag = \"\";\nlet texto_usuario = \"\";\n\nif (datos.texto_para_rag) {\n  texto_para_rag = datos.texto_para_rag;\n  texto_usuario = datos.texto_usuario;\n} else {\n  texto_para_rag = datos.texto_usuario;\n  texto_usuario = datos.texto_usuario;\n}\n\nconst chat_id = $('Extraer Info Mensaje').first().json.chat_id;\nconst nombre_usuario = $('Extraer Info Mensaje').first().json.nombre_usuario;\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    nombre_usuario: nombre_usuario,\n    texto_usuario: texto_usuario,\n    texto_para_rag: texto_para_rag\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        -48
+      ],
+      "id": "4b9abb11-3261-497a-b786-d98d4c003ebd",
+      "name": "Normalizar Datos"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/embeddings",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ model: \"nomic-embed-text\", prompt: \"search_query: \" + $json.texto_para_rag }) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1792,
+        -48
+      ],
+      "id": "3dda5208-c039-4007-b470-1707896098a9",
+      "name": "Embedding Pregunta"
+    },
+    {
+      "parameters": {
+        "url": "http://chromadb:8000/api/v2/tenants/default_tenant/databases/default_database/collections",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2016,
+        -48
+      ],
+      "id": "35551c1c-3a9f-42da-94bc-9ee82c10bab2",
+      "name": "Listar Colecciones"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nconst embedding = $('Embedding Pregunta').first().json.embedding;\nlet coleccionId = \"\";\n\nfor (const item of items) {\n  if (item.json.name === ($env.COLECCION || \"tutorias\")) {\n    coleccionId = item.json.id;\n    break;\n  }\n}\n\nreturn [{\n  json: {\n    coleccion_id: coleccionId,\n    query_body: {\n      query_embeddings: [embedding],\n      n_results: 5,\n      include: [\"documents\", \"metadatas\", \"distances\"]\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -48
+      ],
+      "id": "2ed020d9-4f48-402c-9bf1-8487a9f13d7b",
+      "name": "Preparar Query RAG"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://chromadb:8000/api/v2/tenants/default_tenant/databases/default_database/collections/{{ $json.coleccion_id }}/query",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.query_body) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2464,
+        -48
+      ],
+      "id": "5484533e-f777-4b37-a72e-7bc3543bcb45",
+      "name": "Consultar ChromaDB"
+    },
+    {
+      "parameters": {
+        "jsCode": "const resultados = $input.first().json;\nconst documentos = resultados.documents[0];\nconst metadatos = resultados.metadatas[0];\nconst distancias = resultados.distances[0];\n\nlet partes = [];\nfor (let i = 0; i < documentos.length; i++) {\n  const similitud = (1 - distancias[i]).toFixed(3);\n  const archivo = metadatos[i].archivo;\n  const pagina = metadatos[i].pagina;\n  partes.push(`[Fuente: ${archivo}, p.${pagina} | Similitud: ${similitud}]\\n${documentos[i]}`);\n}\n\nreturn [{\n  json: {\n    contexto_rag: partes.join(\"\\n\\n---\\n\\n\"),\n    num_fragmentos: documentos.length\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2688,
+        -48
+      ],
+      "id": "8e76e1ff-0957-4f20-a800-d785823e1031",
+      "name": "Formatear Contexto RAG"
+    },
+    {
+      "parameters": {
+        "jsCode": "const contexto_rag = $input.first().json.contexto_rag;\nconst texto_usuario = $('Normalizar Datos').first().json.texto_usuario;\nconst chat_id = $('Normalizar Datos').first().json.chat_id;\nconst nombre_usuario = $('Normalizar Datos').first().json.nombre_usuario;\n\nconst system_prompt = `Eres un asistente de tutoría en matemáticas y estadística. Respondes ÚNICAMENTE con JSON válido. Sin texto adicional, sin markdown.\n\nTAREAS:\n1. Si piden plan/programa/sesiones de clase → tarea = \"plan_de_clases\"\n2. Si piden ejercicios/problemas/actividades → tarea = \"banco_de_ejercicios\"  \n3. Si piden agendar/programar una clase con fecha → tarea = \"planificar_clase\"\n4. Si no es claro → tarea = \"aclarar\"\n\nEJEMPLO EXACTO para plan_de_clases (SIGUE ESTA ESTRUCTURA):\n{\n  \"tarea\": \"plan_de_clases\",\n  \"idioma\": \"es\",\n  \"nivel\": \"universidad\",\n  \"num_sesiones\": 2,\n  \"prerequisitos\": \"Conocimientos de algebra básica\",\n  \"sesiones\": [\n    {\n      \"numero\": 1,\n      \"titulo\": \"Introducción al tema\",\n      \"temas\": [\"Tema A\", \"Tema B\"],\n      \"objetivos\": [\"Identificar los conceptos básicos de X\", \"Aplicar Y en problemas sencillos\"],\n      \"explicacion\": \"Explicación detallada aquí. Usar $LaTeX$ para fórmulas.\",\n      \"recomendaciones_didacticas\": \"Errores comunes: confundir A con B. Analogía útil: comparar con C.\",\n      \"duracion_minutos\": 60\n    },\n    {\n      \"numero\": 2,\n      \"titulo\": \"Profundización\",\n      \"temas\": [\"Tema C\", \"Tema D\"],\n      \"objetivos\": [\"Analizar las diferencias entre X e Y\"],\n      \"explicacion\": \"Explicación detallada aquí.\",\n      \"recomendaciones_didacticas\": \"Sugerencia: iniciar con ejercicio práctico.\",\n      \"duracion_minutos\": 60\n    }\n  ]\n}\n\nEJEMPLO EXACTO para banco_de_ejercicios:\n{\n  \"tarea\": \"banco_de_ejercicios\",\n  \"idioma\": \"es\",\n  \"nivel\": \"universidad\",\n  \"temas\": [\n    {\n      \"nombre\": \"Nombre del tema\",\n      \"ejercicios\": [\n        {\n          \"nivel_dificultad\": \"facil\",\n          \"enunciado\": \"Enunciado con $LaTeX$\",\n          \"solucion\": \"Paso 1: ... Paso 2: ...\",\n          \"notas_pedagogicas\": \"Error común: ...\"\n        }\n      ]\n    }\n  ]\n}\n\nEJEMPLO EXACTO para planificar_clase:\n{\n  \"tarea\": \"planificar_clase\",\n  \"idioma\": \"es\",\n  \"estudiante\": \"Nombre\",\n  \"fecha\": \"2025-03-20\",\n  \"hora_inicio\": \"15:00\",\n  \"hora_fin\": \"16:00\",\n  \"modalidad\": \"virtual\",\n  \"notas\": \"\",\n  \"confirmacion\": \"Clase con Nombre el 20 de marzo a las 3pm, virtual\"\n}\n\nEJEMPLO EXACTO para aclarar:\n{\n  \"tarea\": \"aclarar\",\n  \"mensaje\": \"¿Podrías especificar si necesitas un plan de clases o ejercicios?\"\n}\n\nREGLAS OBLIGATORIAS:\n- \"tarea\" SIEMPRE es el primer campo.\n- Para plan_de_clases, \"sesiones\" SIEMPRE es un array de objetos con los campos exactos del ejemplo.\n- NUNCA uses \"sesion1\", \"sesion2\" como claves. SIEMPRE usa el array \"sesiones\".\n- NUNCA uses \"session\", \"contenido\", \"topics\". Usa EXACTAMENTE los nombres de campo del ejemplo.\n- Adapta idioma al del mensaje. Adapta nivel si se indica.\n- Usa verbos de Bloom en objetivos: identificar, explicar, aplicar, analizar, evaluar, crear.\n- Usa $LaTeX$ para fórmulas matemáticas.\n\nCONTEXTO DE DOCUMENTOS:\n${contexto_rag}\n\nSi hay contexto, basa tu respuesta en ese material.`;\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    nombre_usuario: nombre_usuario,\n    mensaje_usuario: texto_usuario,\n    ollama_body_string: JSON.stringify({\n      model: $env.LLM_MODEL || \"qwen2.5:14b-instruct-q5_K_M\",\n      system: system_prompt,\n      prompt: texto_usuario,\n      stream: false,\n      options: {\n        temperature: 0.2,\n        num_predict: 8192\n      }\n    })\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2912,
+        -48
+      ],
+      "id": "6dca9809-be93-4f30-a05c-654cf1690f6e",
+      "name": "Construir Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.ollama_body_string }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3136,
+        -48
+      ],
+      "id": "8dbc210b-ecee-459e-a86f-d2d80dbf4c3f",
+      "name": "Llamar Ollama",
+      "executeOnce": false,
+      "retryOnFail": false,
+      "alwaysOutputData": false,
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const respuesta_cruda = $input.first().json.response;\nconst chat_id = $('Construir Prompt').first().json.chat_id;\nconst nombre_usuario = $('Construir Prompt').first().json.nombre_usuario;\n\nlet json_parseado = null;\nlet error_parseo = false;\nlet fue_reparado = false;\n\ntry {\n  let texto_limpio = respuesta_cruda.trim();\n\n  if (texto_limpio.startsWith(\"```json\")) {\n    texto_limpio = texto_limpio.replace(/```json\\s*/g, \"\").replace(/```\\s*/g, \"\");\n  }\n  if (texto_limpio.startsWith(\"```\")) {\n    texto_limpio = texto_limpio.replace(/```\\s*/g, \"\");\n  }\n\n  const inicio = texto_limpio.indexOf(\"{\");\n  const fin = texto_limpio.lastIndexOf(\"}\");\n  if (inicio !== -1 && fin !== -1 && fin > inicio) {\n    texto_limpio = texto_limpio.substring(inicio, fin + 1);\n  }\n\n  json_parseado = JSON.parse(texto_limpio);\n} catch (e) {\n  let texto_reparar = respuesta_cruda.trim();\n  const inicio = texto_reparar.indexOf(\"{\");\n  if (inicio !== -1) {\n    texto_reparar = texto_reparar.substring(inicio);\n  }\n\n  let brackets_abiertos = 0;\n  let corchetes_abiertos = 0;\n  let en_string = false;\n  let escape = false;\n\n  for (let i = 0; i < texto_reparar.length; i++) {\n    const c = texto_reparar[i];\n    if (escape) { escape = false; continue; }\n    if (c === '\\\\') { escape = true; continue; }\n    if (c === '\"') { en_string = !en_string; continue; }\n    if (en_string) continue;\n    if (c === '{') brackets_abiertos++;\n    if (c === '}') brackets_abiertos--;\n    if (c === '[') corchetes_abiertos++;\n    if (c === ']') corchetes_abiertos--;\n  }\n\n  let cierre = \"\";\n  for (let i = 0; i < corchetes_abiertos; i++) cierre += \"]\";\n  for (let i = 0; i < brackets_abiertos; i++) cierre += \"}\";\n\n  if (en_string) {\n    texto_reparar += '\"';\n  }\n\n  texto_reparar += cierre;\n\n  try {\n    json_parseado = JSON.parse(texto_reparar);\n    fue_reparado = true;\n  } catch (e2) {\n    error_parseo = true;\n  }\n}\n\nif (error_parseo || !json_parseado) {\n  return [{\n    json: {\n      tarea: \"error_parseo\",\n      chat_id: chat_id,\n      nombre_usuario: nombre_usuario,\n      respuesta_cruda: respuesta_cruda\n    }\n  }];\n}\n\njson_parseado.chat_id = chat_id;\njson_parseado.nombre_usuario = nombre_usuario;\njson_parseado.fue_reparado = fue_reparado;\n\nif (json_parseado.tarea === \"banco_de_ejercicios\") {\n  if (!json_parseado.temas && json_parseado.topics) {\n    json_parseado.temas = json_parseado.topics.map(t => ({\n      nombre: t.name || t.nombre || t.topic || \"Sin nombre\",\n      ejercicios: (t.exercises || t.ejercicios || []).map(e => ({\n        nivel_dificultad: e.nivel_dificultad || e.difficulty || e.level || \"media\",\n        enunciado: e.enunciado || e.statement || e.question || \"\",\n        solucion: e.solucion || e.solution || e.answer || \"\",\n        notas_pedagogicas: e.notas_pedagogicas || e.notes || \"\"\n      }))\n    }));\n  }\n}\n\nreturn [{\n  json: json_parseado\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3360,
+        -48
+      ],
+      "id": "e3665b89-b660-43a3-b9bf-8551535b10e3",
+      "name": "Parsear Respuesta LLM"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.tarea }}",
+                    "rightValue": "plan_de_clases",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "f0b1385e-4936-42e8-aa0e-fccc41995fe8"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Plan de Clases"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "602dc2f7-e8b0-4940-af6b-7c361955d19b",
+                    "leftValue": "={{ $json.tarea }}",
+                    "rightValue": "banco_de_ejercicios",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Banco de Ejercicios"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "ccbbe434-7339-444e-97ea-a40ea12529f8",
+                    "leftValue": "={{ $json.tarea }}",
+                    "rightValue": "planificar_clase",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Planificar Clase"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "27cf6326-de98-441a-b9d1-57cebb5a65d7",
+                    "leftValue": "={{ $json.tarea }}",
+                    "rightValue": "aclarar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Aclarar"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3584,
+        -96
+      ],
+      "id": "cf26289c-b514-4a2d-a179-f063257f373a",
+      "name": "Router de Tareas"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json;\nconst nivel = datos.nivel || \"universidad\";\n\nlet sesiones = [];\n\nif (datos.sesiones && Array.isArray(datos.sesiones)) {\n  sesiones = datos.sesiones;\n} else {\n  for (const key of Object.keys(datos)) {\n    if (key.startsWith(\"sesion\") || key.startsWith(\"session\")) {\n      const s = datos[key];\n      const num = parseInt(key.replace(/\\D/g, \"\")) || sesiones.length + 1;\n      sesiones.push({\n        numero: num,\n        titulo: s.titulo || s.tema || s.name || s.title || \"\",\n        temas: s.temas || s.topics || s.contenido || [],\n        objetivos: s.objetivos || s.objectives || [],\n        explicacion: s.explicacion || (s.contenido ? s.contenido.join(\"\\n• \") : \"\"),\n        recomendaciones_didacticas: s.recomendaciones_didacticas || s.recomendaciones || \"\",\n        ejemplos: s.ejemplos || s.examples || [],\n        actividades: s.actividades || s.activities || [],\n        duracion_minutos: s.duracion_minutos || 60\n      });\n    }\n  }\n}\n\nlet mensaje = `📚 *PLAN DE CLASES*\\n\\n`;\nmensaje += `📊 *Nivel:* ${nivel}\\n`;\nmensaje += `📅 *Sesiones:* ${sesiones.length}\\n`;\n\nif (datos.prerequisitos) {\n  mensaje += `\\n⚠️ *Prerequisitos:*\\n${datos.prerequisitos}\\n`;\n}\n\nfor (const sesion of sesiones) {\n  mensaje += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  mensaje += `📖 *Sesión ${sesion.numero}: ${sesion.titulo}*\\n`;\n  mensaje += `⏱ Duración: ${sesion.duracion_minutos} min\\n`;\n\n  if (sesion.temas && sesion.temas.length > 0) {\n    mensaje += `\\n📌 *Temas:*\\n`;\n    for (const tema of sesion.temas) {\n      mensaje += `  • ${tema}\\n`;\n    }\n  }\n\n  if (sesion.objetivos && sesion.objetivos.length > 0) {\n    mensaje += `\\n🎯 *Objetivos:*\\n`;\n    for (const obj of sesion.objetivos) {\n      mensaje += `  • ${obj}\\n`;\n    }\n  }\n\n  if (sesion.explicacion) {\n    mensaje += `\\n📝 *Desarrollo:*\\n${sesion.explicacion}\\n`;\n  }\n\n  if (sesion.ejemplos && sesion.ejemplos.length > 0) {\n    mensaje += `\\n📎 *Ejemplos:*\\n`;\n    for (const ej of sesion.ejemplos) {\n      mensaje += `  • ${ej}\\n`;\n    }\n  }\n\n  if (sesion.actividades && sesion.actividades.length > 0) {\n    mensaje += `\\n🔧 *Actividades:*\\n`;\n    for (const act of sesion.actividades) {\n      mensaje += `  • ${act}\\n`;\n    }\n  }\n\n  if (sesion.recomendaciones_didacticas) {\n    mensaje += `\\n💡 *Recomendaciones:*\\n${sesion.recomendaciones_didacticas}\\n`;\n  }\n}\n\nif (datos.fue_reparado) {\n  mensaje += `\\n\\n⚠️ _Nota: La respuesta fue truncada. Algunas sesiones pueden estar incompletas._`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        -560
+      ],
+      "id": "01b16f84-1113-4e22-93c2-353bd7d4890c",
+      "name": "Formato Plan"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json;\nconst temas = datos.temas || [];\nconst nivel = datos.nivel || \"universidad\";\n\nlet mensaje = `📝 *Banco de Ejercicios*\\nNivel: ${nivel}\\n`;\nlet total_ejercicios = 0;\n\nfor (const tema of temas) {\n  mensaje += `\\n━━━━━━━━━━━━━━━━━━\\n`;\n  mensaje += `*Tema: ${tema.nombre}*\\n`;\n\n  const ejercicios = tema.ejercicios || [];\n  total_ejercicios += ejercicios.length;\n\n  for (const ej of ejercicios) {\n    const icono = ej.nivel_dificultad === \"facil\" ? \"🟢\" :\n                  ej.nivel_dificultad === \"media\" ? \"🟡\" : \"🔴\";\n    mensaje += `${icono} ${ej.nivel_dificultad} — ${ej.enunciado.substring(0, 100)}...\\n`;\n  }\n}\n\nmensaje += `\\n📄 _Enviando PDF con ${total_ejercicios} ejercicios y soluciones completas..._`;\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje,\n    datos_ejercicios: {\n      nivel: datos.nivel,\n      temas: datos.temas\n    }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        -352
+      ],
+      "id": "15bffb89-516c-4384-b7a7-47b043937759",
+      "name": "Formato Ejercicios"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json;\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: `❓ ${datos.mensaje}`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4000,
+        208
+      ],
+      "id": "88374e2a-c3ad-4902-851f-4b1a0065da29",
+      "name": "Formato Aclarar"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json;\n\nlet mensaje = \"⚠️ No pude procesar tu solicitud correctamente. Por favor intenta reformular tu mensaje.\";\n\nif (datos.tarea === \"error_parseo\") {\n  mensaje += \"\\n\\n_Detalle técnico: la respuesta del modelo no fue JSON válido._\";\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id || \"\",\n    mensaje: mensaje\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4000,
+        400
+      ],
+      "id": "0bd343ca-d113-4177-8dbf-b613d00a331e",
+      "name": "Formato Error"
+    },
+    {
+      "parameters": {
+        "numberInputs": 5
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        4608,
+        -80
+      ],
+      "id": "5d49889f-2178-4efe-8b61-9ce25bef4100",
+      "name": "Unir Respuestas"
+    },
+    {
+      "parameters": {
+        "jsCode": "const chat_id = $input.first().json.chat_id;\nconst mensaje_completo = $input.first().json.mensaje;\n\nconst LIMITE = 4000;\nconst mensajes = [];\n\nif (mensaje_completo.length <= LIMITE) {\n  mensajes.push(mensaje_completo);\n} else {\n  let restante = mensaje_completo;\n  while (restante.length > 0) {\n    if (restante.length <= LIMITE) {\n      mensajes.push(restante);\n      break;\n    }\n    let corte = restante.lastIndexOf(\"\\n\", LIMITE);\n    if (corte === -1 || corte < LIMITE * 0.5) {\n      corte = LIMITE;\n    }\n    mensajes.push(restante.substring(0, corte));\n    restante = restante.substring(corte).trimStart();\n  }\n}\n\nconst items = mensajes.map(msg => ({\n  json: {\n    chat_id: chat_id,\n    texto: msg\n  }\n}));\n\nreturn items;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4880,
+        -32
+      ],
+      "id": "ca3f34a5-1656-4fb3-bb0a-a171a9a5bbdd",
+      "name": "Dividir Mensaje Largo"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.chat_id }}",
+        "text": "={{ $json.texto }}",
+        "additionalFields": {
+          "parse_mode": "Markdown"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        5056,
+        -32
+      ],
+      "id": "3ae5fd89-5548-49dc-90a4-0f1aec68d84b",
+      "name": "Enviar Respuesta"
+    },
+    {
+      "parameters": {
+        "content": "## **Recibir Mensaje**",
+        "height": 352,
+        "width": 1088
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -720,
+        -336
+      ],
+      "typeVersion": 1,
+      "id": "e08715b7-f362-47a3-a504-248e8c24afe4",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "## **Enviar Procesando**",
+        "height": 80,
+        "width": 176,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        416,
+        -336
+      ],
+      "typeVersion": 1,
+      "id": "2b7c5c7e-47e9-4ca6-97bf-b49798f76638",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://latex-renderer:5001/render",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.datos_ejercicios) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        4480,
+        -352
+      ],
+      "id": "2037f7a1-fb0c-476a-8999-4a2e4c4cfb1c",
+      "name": "Generar PDF",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Formato Ejercicios').first().json.chat_id }}",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "📝 Ejercicios generados",
+          "fileName": "ejercicios.pdf"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        4880,
+        -352
+      ],
+      "id": "90434ff4-425d-42bd-877c-b7473016ea82",
+      "name": "Enviar PDF Telegram",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json;\n\nconst estudiante = datos.estudiante || \"\";\nconst fecha = datos.fecha || \"\";\nconst hora_inicio = datos.hora_inicio || \"\";\nconst hora_fin = datos.hora_fin || \"\";\nconst modalidad = datos.modalidad || \"\";\n\nlet errores = [];\n\nif (!estudiante || estudiante === \"Nombre\") {\n  errores.push(\"nombre del estudiante\");\n}\n\nconst fecha_regex = /^\\d{4}-\\d{2}-\\d{2}$/;\nif (!fecha || !fecha_regex.test(fecha)) {\n  errores.push(\"fecha en formato YYYY-MM-DD\");\n}\n\nconst hora_regex = /^\\d{2}:\\d{2}$/;\nif (!hora_inicio || !hora_regex.test(hora_inicio)) {\n  errores.push(\"hora de inicio en formato HH:MM\");\n}\n\nif (!modalidad || (modalidad !== \"virtual\" && modalidad !== \"presencial\")) {\n  errores.push(\"modalidad (virtual o presencial)\");\n}\n\nlet hora_fin_final = hora_fin;\nif (!hora_fin || !hora_regex.test(hora_fin)) {\n  if (hora_inicio && hora_regex.test(hora_inicio)) {\n    const partes = hora_inicio.split(\":\");\n    let hora = parseInt(partes[0]) + 1;\n    if (hora > 23) hora = 23;\n    hora_fin_final = String(hora).padStart(2, '0') + \":\" + partes[1];\n  }\n}\n\nif (errores.length > 0) {\n  return [{\n    json: {\n      valido: false,\n      chat_id: datos.chat_id,\n      mensaje_error: `Para agendar la clase necesito que especifiques: ${errores.join(\", \")}.`\n    }\n  }];\n}\n\nconst fecha_inicio_iso = `${fecha}T${hora_inicio}:00`;\nconst fecha_fin_iso = `${fecha}T${hora_fin_final}:00`;\n\nreturn [{\n  json: {\n    valido: true,\n    chat_id: datos.chat_id,\n    nombre_usuario: datos.nombre_usuario,\n    estudiante: estudiante,\n    fecha: fecha,\n    hora_inicio: hora_inicio,\n    hora_fin: hora_fin_final,\n    modalidad: modalidad,\n    notas: datos.notas || \"\",\n    fecha_inicio_iso: fecha_inicio_iso,\n    fecha_fin_iso: fecha_fin_iso,\n    confirmacion: datos.confirmacion || \"\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3824,
+        -48
+      ],
+      "id": "93385c15-d7d9-4430-a863-37ea101f1fc6",
+      "name": "Validar Datos Clase"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8a64f2d2-f9d9-4b73-904f-763e002c5b9d",
+              "leftValue": "={{ $json.valido }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        3968,
+        -48
+      ],
+      "id": "ecf3592d-10af-4f04-a3dc-89d1372a7be4",
+      "name": "Datos Clase Validos"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json;\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: `❓ ${datos.mensaje_error}\\n\\nEjemplo: \"Planea una clase con María el lunes 24 de marzo a las 2pm, virtual\"`\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4128,
+        -32
+      ],
+      "id": "f69176fb-b54a-4e9d-bbfd-a049b8bb9893",
+      "name": "Formato Aclarar Clase"
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "value": "={{ $env.GOOGLE_CALENDAR_ID }}",
+          "mode": "id"
+        },
+        "start": "={{ $json.fecha_inicio_iso }}",
+        "end": "={{ $json.fecha_fin_iso }}",
+        "additionalFields": {
+          "conferenceDataUi": {
+            "conferenceDataValues": {
+              "conferenceSolution": "hangoutsMeet"
+            }
+          },
+          "description": "=Clase de tutoría con {{ $json.estudiante }}\\nModalidad: {{ $json.modalidad }}\\nNotas: {{ $json.notas }}",
+          "summary": "=Clase con {{ $json.estudiante }}"
+        }
+      },
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        4128,
+        -160
+      ],
+      "id": "2c3807f6-3e80-4965-9338-3b5e130a7322",
+      "name": "Create an event"
+    },
+    {
+      "parameters": {
+        "jsCode": "const evento = $input.first().json;\nconst datos_clase = $('Validar Datos Clase').first().json;\n\nconst estudiante = datos_clase.estudiante;\nconst fecha = datos_clase.fecha;\nconst hora_inicio = datos_clase.hora_inicio;\nconst hora_fin = datos_clase.hora_fin;\nconst modalidad = datos_clase.modalidad;\nconst notas = datos_clase.notas;\nconst chat_id = datos_clase.chat_id;\n\nlet meet_link = \"\";\nif (evento.conferenceData && evento.conferenceData.entryPoints) {\n  for (const ep of evento.conferenceData.entryPoints) {\n    if (ep.entryPointType === \"video\") {\n      meet_link = ep.uri;\n      break;\n    }\n  }\n}\nif (!meet_link && evento.hangoutLink) {\n  meet_link = evento.hangoutLink;\n}\n\nlet mensaje = `✅ *Clase Agendada Exitosamente*\\n\\n`;\nmensaje += `👤 *Estudiante:* ${estudiante}\\n`;\nmensaje += `📆 *Fecha:* ${fecha}\\n`;\nmensaje += `🕐 *Hora:* ${hora_inicio} - ${hora_fin}\\n`;\nmensaje += `📍 *Modalidad:* ${modalidad}\\n`;\n\nif (notas) {\n  mensaje += `📝 *Notas:* ${notas}\\n`;\n}\n\nif (meet_link) {\n  mensaje += `\\n🔗 *Enlace Google Meet:*\\n${meet_link}\\n`;\n  mensaje += `\\n_Comparte este enlace con ${estudiante} antes de la clase._`;\n} else if (modalidad === \"virtual\") {\n  mensaje += `\\n⚠️ _No se pudo generar el enlace de Meet automáticamente. Créalo manualmente desde Google Calendar._`;\n}\n\nif (evento.htmlLink) {\n  mensaje += `\\n\\n📅 [Ver en Google Calendar](${evento.htmlLink})`;\n}\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    mensaje: mensaje\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4272,
+        -160
+      ],
+      "id": "cfdbc71c-bd59-4bae-b89f-3c3636cf3109",
+      "name": "Crear Evento Calendar"
+    },
+    {
+      "parameters": {
+        "content": "## Hacer uso de archivo adjunto",
+        "height": 208,
+        "width": 560
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        688,
+        -224
+      ],
+      "id": "14a49c40-0c51-4b6e-9483-d633ce55d7d0",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "## Generar consulta RAG y  conexión a chromaDB",
+        "height": 400,
+        "width": 1312,
+        "color": 5
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        -192
+      ],
+      "id": "ce5e298d-3452-43bd-84ba-d1a437c7a84f",
+      "name": "Sticky Note3"
+    },
+    {
+      "parameters": {
+        "content": "## Llamar qwen",
+        "height": 400,
+        "width": 672,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2864,
+        -192
+      ],
+      "id": "5a69547a-411f-46d1-ac6b-d65f855cc00c",
+      "name": "Sticky Note4"
+    },
+    {
+      "parameters": {
+        "content": "## Porceder segun tarea asignada",
+        "height": 1504,
+        "width": 1264,
+        "color": 3
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3568,
+        -800
+      ],
+      "id": "bd3b046f-eea5-41d4-8a77-f2ff068bd8b6",
+      "name": "Sticky Note5"
+    },
+    {
+      "parameters": {
+        "content": "## Enviar respuestas a Telegram",
+        "height": 672,
+        "width": 432
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        4848,
+        -448
+      ],
+      "id": "c4211ddc-749e-4bc6-bf0f-65f882b1e56e",
+      "name": "Sticky Note6"
+    }
+  ],
+  "connections": {
+    "Telegram getUpdates": {
+      "main": [
+        [
+          {
+            "node": "Procesar Updates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Polling Timer": {
+      "main": [
+        [
+          {
+            "node": "Telegram getUpdates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Updates": {
+      "main": [
+        [
+          {
+            "node": "Confirmar Offset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Confirmar Offset": {
+      "main": [
+        [
+          {
+            "node": "Extraer Info Mensaje",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extraer Info Mensaje": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Tiene Archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message": {
+      "main": [
+        []
+      ]
+    },
+    "Tiene Archivo": {
+      "main": [
+        [
+          {
+            "node": "Telegram getFile",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Unir Ramas Archivo",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Telegram getFile": {
+      "main": [
+        [
+          {
+            "node": "Descargar Archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Descargar Archivo": {
+      "main": [
+        [
+          {
+            "node": "Procesar Archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Procesar Archivo": {
+      "main": [
+        [
+          {
+            "node": "Unir Ramas Archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unir Ramas Archivo": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Datos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Datos": {
+      "main": [
+        [
+          {
+            "node": "Embedding Pregunta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embedding Pregunta": {
+      "main": [
+        [
+          {
+            "node": "Listar Colecciones",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Listar Colecciones": {
+      "main": [
+        [
+          {
+            "node": "Preparar Query RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Query RAG": {
+      "main": [
+        [
+          {
+            "node": "Consultar ChromaDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar ChromaDB": {
+      "main": [
+        [
+          {
+            "node": "Formatear Contexto RAG",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatear Contexto RAG": {
+      "main": [
+        [
+          {
+            "node": "Construir Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Construir Prompt": {
+      "main": [
+        [
+          {
+            "node": "Llamar Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Llamar Ollama": {
+      "main": [
+        [
+          {
+            "node": "Parsear Respuesta LLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parsear Respuesta LLM": {
+      "main": [
+        [
+          {
+            "node": "Router de Tareas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Router de Tareas": {
+      "main": [
+        [
+          {
+            "node": "Formato Plan",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formato Ejercicios",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Validar Datos Clase",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formato Aclarar",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formato Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formato Aclarar": {
+      "main": [
+        [
+          {
+            "node": "Unir Respuestas",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Formato Plan": {
+      "main": [
+        [
+          {
+            "node": "Unir Respuestas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formato Ejercicios": {
+      "main": [
+        [
+          {
+            "node": "Generar PDF",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Unir Respuestas",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Formato Error": {
+      "main": [
+        [
+          {
+            "node": "Unir Respuestas",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Unir Respuestas": {
+      "main": [
+        [
+          {
+            "node": "Dividir Mensaje Largo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dividir Mensaje Largo": {
+      "main": [
+        [
+          {
+            "node": "Enviar Respuesta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar PDF": {
+      "main": [
+        [
+          {
+            "node": "Enviar PDF Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar PDF Telegram": {
+      "main": [
+        []
+      ]
+    },
+    "Validar Datos Clase": {
+      "main": [
+        [
+          {
+            "node": "Datos Clase Validos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Datos Clase Validos": {
+      "main": [
+        [
+          {
+            "node": "Create an event",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formato Aclarar Clase",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formato Aclarar Clase": {
+      "main": [
+        [
+          {
+            "node": "Unir Respuestas",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Create an event": {
+      "main": [
+        [
+          {
+            "node": "Crear Evento Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crear Evento Calendar": {
+      "main": [
+        [
+          {
+            "node": "Unir Respuestas",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false,
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner"
+  }
+}
