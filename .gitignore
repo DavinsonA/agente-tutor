@@ -5,3 +5,8 @@ data/
 n8n-data/
 chroma-data/
 *.pdf
+
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+.mcp.json
