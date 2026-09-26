@@ -51,9 +51,10 @@ def texto_mixto(pdf, texto):
             img = latex_png(parte.strip("$"))
             if img:
                 pdf.image(img, h=8)
+                pdf.set_x(pdf.l_margin)
                 continue
         pdf.set_font("Helvetica", "", 11)
-        pdf.multi_cell(0, 6, parte.strip())
+        pdf.multi_cell(0, 6, parte.strip(), new_x="LMARGIN", new_y="NEXT")
 
 
 def seccion(pdf, titulo, texto):
