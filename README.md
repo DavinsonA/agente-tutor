@@ -1,6 +1,10 @@
+<p align="center">
+  <img src="assets/gaussito.jpg" alt="Gaussito" width="280">
+</p>
+
 # agente-tutor
 
-Bot de Telegram para tutorías de estadística: n8n + Ollama + ChromaDB.
+**Gaussito**, bot de Telegram para tutorías de matemáticas y estadística: n8n + Ollama + ChromaDB.
 
 ```
 cp .env.example .env
