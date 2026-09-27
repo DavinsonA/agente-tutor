@@ -43,10 +43,16 @@ Polling Timer (5 s) → getUpdates (limit=1) → Procesar Updates → Confirmar 
 - **Especialistas**: nodos Code, cada uno con su prompt y su JSON Schema (sacados de v2 sin lo de idioma
   ni memoria). Los tres comparten `Llamar Ollama` (`/api/chat`, `think: false`, `num_ctx` 8192, hasta 4096
   tokens de salida, temperatura 0.2; el Agendador usa 0).
+- **Esquema forzado solo donde no hay LaTeX**: Orquestador y Agendador pasan el esquema como `format` de
+  Ollama. Planeador y Ejercicios lo llevan en el prompt: qwen3 escribe LaTeX con una sola barra dentro del
+  JSON, y con `format` la gramática le prohíbe `\pm`, `\sigma`, `\sqrt`… (escapes inválidos). El modelo quedaba
+  en bucle (`\text{ } \text{ } …`) hasta cortar la respuesta; pasaba en 3 de cada 4 planes de intervalos.
 - **Agendador**: recibe en el prompt los próximos 14 días con su día de la semana (America/Bogota).
-- **Parsear Respuesta LLM**: toma `tarea` y fuentes del Orquestador; mantiene el reparador de JSON truncado
-  de siempre; corrige el LaTeX que el LLM rompe al escapar (`\frac` llega como salto de página + "rac"); si
-  hay `dia_semana`, calcula la fecha: siempre la próxima ocurrencia, nunca hoy (para hoy se dice "hoy").
+- **Parsear Respuesta LLM**: toma `tarea` y fuentes del Orquestador; duplica las barras que no forman un
+  escape válido de JSON (`\pm` → `\\pm`) antes de parsear; mantiene el reparador de JSON truncado de siempre;
+  corrige el LaTeX que sí parsea pero mal (`\frac` llega como salto de página + "rac"); normaliza la
+  dificultad (intermedio → media); si hay `dia_semana`, calcula la fecha: siempre la próxima ocurrencia,
+  nunca hoy (para hoy se dice "hoy").
 - **Validar Datos Clase**: exige estudiante, fecha y hora; si falta la modalidad asume virtual y la
   confirmación dice "virtual (asumida)".
 - Las fuentes se muestran como `` `archivo p.N` `` para que los `_` no rompan el Markdown de Telegram.
