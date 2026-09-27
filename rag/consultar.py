@@ -11,7 +11,7 @@ def main():
     args = p.parse_args()
 
     pregunta = " ".join(args.pregunta)
-    emb = chroma.embeber([f"search_query: {pregunta}"])[0]
+    emb = chroma.embeber([pregunta])[0]
     filtro = {"tipo": args.tipo} if args.tipo else None
     r = chroma.buscar(chroma.coleccion(), emb, args.k, filtro)
 

@@ -3,7 +3,7 @@
   "nodes": [
     {
       "parameters": {
-        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates?timeout=0&allowed_updates=[\"message\"]",
+        "url": "=https://api.telegram.org/bot{{ $env.TELEGRAM_BOT_TOKEN }}/getUpdates?timeout=0&allowed_updates=[\"message\"]&limit=1",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
@@ -142,7 +142,13 @@
     {
       "parameters": {
         "url": "=https://api.telegram.org/file/bot{{ $env.TELEGRAM_BOT_TOKEN }}/{{ $json.result.file_path }}",
-        "options": {}
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file"
+            }
+          }
+        }
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
@@ -159,7 +165,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const texto_usuario = $('Extraer Info Mensaje').first().json.texto_usuario;\nconst nombre_archivo = $('Extraer Info Mensaje').first().json.nombre_archivo;\n\nconst nombre_limpio = nombre_archivo\n  .replace(/\\.pdf$/i, \"\")\n  .replace(/[_-]/g, \" \");\n\nconst texto_para_rag = texto_usuario + \" \" + nombre_limpio + \" contenido temas ejercicios definiciones\";\n\nreturn [{\n  json: {\n    texto_para_rag: texto_para_rag,\n    texto_usuario: texto_usuario + ` [Archivo adjunto: ${nombre_archivo}]`,\n    archivo_descargado: true\n  }\n}];"
+        "jsCode": "const texto_usuario = $('Extraer Info Mensaje').first().json.texto_usuario;\nconst nombre_archivo = $('Extraer Info Mensaje').first().json.nombre_archivo;\nconst contenido = ($input.first().json.text || \"\").slice(0, 4000);\n\nreturn [{\n  json: {\n    texto_usuario: texto_usuario + ` [Archivo adjunto: ${nombre_archivo}]` + (contenido ? `\\n\\nContenido del archivo:\\n${contenido}` : \"\")\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -183,7 +189,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst datos = items[0].json;\n\nlet texto_para_rag = \"\";\nlet texto_usuario = \"\";\n\nif (datos.texto_para_rag) {\n  texto_para_rag = datos.texto_para_rag;\n  texto_usuario = datos.texto_usuario;\n} else {\n  texto_para_rag = datos.texto_usuario;\n  texto_usuario = datos.texto_usuario;\n}\n\nconst chat_id = $('Extraer Info Mensaje').first().json.chat_id;\nconst nombre_usuario = $('Extraer Info Mensaje').first().json.nombre_usuario;\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    nombre_usuario: nombre_usuario,\n    texto_usuario: texto_usuario,\n    texto_para_rag: texto_para_rag\n  }\n}];"
+        "jsCode": "const info = $('Extraer Info Mensaje').first().json;\n\nreturn [{\n  json: {\n    chat_id: info.chat_id,\n    nombre_usuario: info.nombre_usuario,\n    texto_usuario: $input.first().json.texto_usuario\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -200,13 +206,13 @@
         "url": "http://host.docker.internal:11434/api/embeddings",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={{ JSON.stringify({ model: \"nomic-embed-text\", prompt: \"search_query: \" + $json.texto_para_rag }) }}",
+        "jsonBody": "={{ JSON.stringify({ model: \"bge-m3\", prompt: $json.consulta }) }}",
         "options": {}
       },
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        1792,
+        2688,
         -48
       ],
       "id": "3dda5208-c039-4007-b470-1707896098a9",
@@ -220,7 +226,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        2016,
+        2912,
         -48
       ],
       "id": "35551c1c-3a9f-42da-94bc-9ee82c10bab2",
@@ -228,12 +234,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const items = $input.all();\nconst embedding = $('Embedding Pregunta').first().json.embedding;\nlet coleccionId = \"\";\n\nfor (const item of items) {\n  if (item.json.name === ($env.COLECCION || \"tutorias\")) {\n    coleccionId = item.json.id;\n    break;\n  }\n}\n\nreturn [{\n  json: {\n    coleccion_id: coleccionId,\n    query_body: {\n      query_embeddings: [embedding],\n      n_results: 5,\n      include: [\"documents\", \"metadatas\", \"distances\"]\n    }\n  }\n}];"
+        "jsCode": "const items = $input.all();\nconst embedding = $('Embedding Pregunta').first().json.embedding;\nconst tipos = $('Leer Orquestador').first().json.tipos;\nlet coleccionId = \"\";\n\nfor (const item of items) {\n  if (item.json.name === ($env.COLECCION || \"tutorias\")) {\n    coleccionId = item.json.id;\n    break;\n  }\n}\n\nreturn [{\n  json: {\n    coleccion_id: coleccionId,\n    query_body: {\n      query_embeddings: [embedding],\n      n_results: 5,\n      include: [\"documents\", \"metadatas\", \"distances\"],\n      ...(tipos ? { where: { tipo: { $in: tipos } } } : {})\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2240,
+        3136,
         -48
       ],
       "id": "2ed020d9-4f48-402c-9bf1-8487a9f13d7b",
@@ -251,7 +257,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        2464,
+        3360,
         -48
       ],
       "id": "5484533e-f777-4b37-a72e-7bc3543bcb45",
@@ -259,12 +265,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const resultados = $input.first().json;\nconst documentos = resultados.documents[0];\nconst metadatos = resultados.metadatas[0];\nconst distancias = resultados.distances[0];\n\nlet partes = [];\nfor (let i = 0; i < documentos.length; i++) {\n  const similitud = (1 - distancias[i]).toFixed(3);\n  const archivo = metadatos[i].archivo;\n  const pagina = metadatos[i].pagina;\n  partes.push(`[Fuente: ${archivo}, p.${pagina} | Similitud: ${similitud}]\\n${documentos[i]}`);\n}\n\nreturn [{\n  json: {\n    contexto_rag: partes.join(\"\\n\\n---\\n\\n\"),\n    num_fragmentos: documentos.length\n  }\n}];"
+        "jsCode": "const resultados = $input.first().json;\nconst documentos = resultados.documents[0];\nconst metadatos = resultados.metadatas[0];\nconst distancias = resultados.distances[0];\n\nlet partes = [];\nfor (let i = 0; i < documentos.length; i++) {\n  const similitud = (1 - distancias[i]).toFixed(3);\n  const archivo = metadatos[i].archivo;\n  const pagina = metadatos[i].pagina;\n  partes.push(`[Fuente: ${archivo}, p.${pagina} | Similitud: ${similitud}]\\n${documentos[i]}`);\n}\n\nreturn [{\n  json: {\n    contexto_rag: partes.join(\"\\n\\n---\\n\\n\"),\n    num_fragmentos: documentos.length,\n    fuentes: metadatos.map(m => ({ archivo: m.archivo, pagina: m.pagina }))\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        2688,
+        3584,
         -48
       ],
       "id": "8e76e1ff-0957-4f20-a800-d785823e1031",
@@ -272,21 +278,8 @@
     },
     {
       "parameters": {
-        "jsCode": "const contexto_rag = $input.first().json.contexto_rag;\nconst texto_usuario = $('Normalizar Datos').first().json.texto_usuario;\nconst chat_id = $('Normalizar Datos').first().json.chat_id;\nconst nombre_usuario = $('Normalizar Datos').first().json.nombre_usuario;\n\nconst system_prompt = `Eres un asistente de tutoría en matemáticas y estadística. Respondes ÚNICAMENTE con JSON válido. Sin texto adicional, sin markdown.\n\nTAREAS:\n1. Si piden plan/programa/sesiones de clase → tarea = \"plan_de_clases\"\n2. Si piden ejercicios/problemas/actividades → tarea = \"banco_de_ejercicios\"  \n3. Si piden agendar/programar una clase con fecha → tarea = \"planificar_clase\"\n4. Si no es claro → tarea = \"aclarar\"\n\nEJEMPLO EXACTO para plan_de_clases (SIGUE ESTA ESTRUCTURA):\n{\n  \"tarea\": \"plan_de_clases\",\n  \"idioma\": \"es\",\n  \"nivel\": \"universidad\",\n  \"num_sesiones\": 2,\n  \"prerequisitos\": \"Conocimientos de algebra básica\",\n  \"sesiones\": [\n    {\n      \"numero\": 1,\n      \"titulo\": \"Introducción al tema\",\n      \"temas\": [\"Tema A\", \"Tema B\"],\n      \"objetivos\": [\"Identificar los conceptos básicos de X\", \"Aplicar Y en problemas sencillos\"],\n      \"explicacion\": \"Explicación detallada aquí. Usar $LaTeX$ para fórmulas.\",\n      \"recomendaciones_didacticas\": \"Errores comunes: confundir A con B. Analogía útil: comparar con C.\",\n      \"duracion_minutos\": 60\n    },\n    {\n      \"numero\": 2,\n      \"titulo\": \"Profundización\",\n      \"temas\": [\"Tema C\", \"Tema D\"],\n      \"objetivos\": [\"Analizar las diferencias entre X e Y\"],\n      \"explicacion\": \"Explicación detallada aquí.\",\n      \"recomendaciones_didacticas\": \"Sugerencia: iniciar con ejercicio práctico.\",\n      \"duracion_minutos\": 60\n    }\n  ]\n}\n\nEJEMPLO EXACTO para banco_de_ejercicios:\n{\n  \"tarea\": \"banco_de_ejercicios\",\n  \"idioma\": \"es\",\n  \"nivel\": \"universidad\",\n  \"temas\": [\n    {\n      \"nombre\": \"Nombre del tema\",\n      \"ejercicios\": [\n        {\n          \"nivel_dificultad\": \"facil\",\n          \"enunciado\": \"Enunciado con $LaTeX$\",\n          \"solucion\": \"Paso 1: ... Paso 2: ...\",\n          \"notas_pedagogicas\": \"Error común: ...\"\n        }\n      ]\n    }\n  ]\n}\n\nEJEMPLO EXACTO para planificar_clase:\n{\n  \"tarea\": \"planificar_clase\",\n  \"idioma\": \"es\",\n  \"estudiante\": \"Nombre\",\n  \"fecha\": \"2025-03-20\",\n  \"hora_inicio\": \"15:00\",\n  \"hora_fin\": \"16:00\",\n  \"modalidad\": \"virtual\",\n  \"notas\": \"\",\n  \"confirmacion\": \"Clase con Nombre el 20 de marzo a las 3pm, virtual\"\n}\n\nEJEMPLO EXACTO para aclarar:\n{\n  \"tarea\": \"aclarar\",\n  \"mensaje\": \"¿Podrías especificar si necesitas un plan de clases o ejercicios?\"\n}\n\nREGLAS OBLIGATORIAS:\n- \"tarea\" SIEMPRE es el primer campo.\n- Para plan_de_clases, \"sesiones\" SIEMPRE es un array de objetos con los campos exactos del ejemplo.\n- NUNCA uses \"sesion1\", \"sesion2\" como claves. SIEMPRE usa el array \"sesiones\".\n- NUNCA uses \"session\", \"contenido\", \"topics\". Usa EXACTAMENTE los nombres de campo del ejemplo.\n- Adapta idioma al del mensaje. Adapta nivel si se indica.\n- Usa verbos de Bloom en objetivos: identificar, explicar, aplicar, analizar, evaluar, crear.\n- Usa $LaTeX$ para fórmulas matemáticas.\n\nCONTEXTO DE DOCUMENTOS:\n${contexto_rag}\n\nSi hay contexto, basa tu respuesta en ese material.`;\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    nombre_usuario: nombre_usuario,\n    mensaje_usuario: texto_usuario,\n    ollama_body_string: JSON.stringify({\n      model: $env.LLM_MODEL || \"qwen2.5:14b-instruct-q5_K_M\",\n      system: system_prompt,\n      prompt: texto_usuario,\n      stream: false,\n      options: {\n        temperature: 0.2,\n        num_predict: 8192\n      }\n    })\n  }\n}];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2912,
-        -48
-      ],
-      "id": "6dca9809-be93-4f30-a05c-654cf1690f6e",
-      "name": "Construir Prompt"
-    },
-    {
-      "parameters": {
         "method": "POST",
-        "url": "http://host.docker.internal:11434/api/generate",
+        "url": "http://host.docker.internal:11434/api/chat",
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
@@ -305,7 +298,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        3136,
+        4256,
         -48
       ],
       "id": "8dbc210b-ecee-459e-a86f-d2d80dbf4c3f",
@@ -317,12 +310,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const respuesta_cruda = $input.first().json.response;\nconst chat_id = $('Construir Prompt').first().json.chat_id;\nconst nombre_usuario = $('Construir Prompt').first().json.nombre_usuario;\n\nlet json_parseado = null;\nlet error_parseo = false;\nlet fue_reparado = false;\n\ntry {\n  let texto_limpio = respuesta_cruda.trim();\n\n  if (texto_limpio.startsWith(\"```json\")) {\n    texto_limpio = texto_limpio.replace(/```json\\s*/g, \"\").replace(/```\\s*/g, \"\");\n  }\n  if (texto_limpio.startsWith(\"```\")) {\n    texto_limpio = texto_limpio.replace(/```\\s*/g, \"\");\n  }\n\n  const inicio = texto_limpio.indexOf(\"{\");\n  const fin = texto_limpio.lastIndexOf(\"}\");\n  if (inicio !== -1 && fin !== -1 && fin > inicio) {\n    texto_limpio = texto_limpio.substring(inicio, fin + 1);\n  }\n\n  json_parseado = JSON.parse(texto_limpio);\n} catch (e) {\n  let texto_reparar = respuesta_cruda.trim();\n  const inicio = texto_reparar.indexOf(\"{\");\n  if (inicio !== -1) {\n    texto_reparar = texto_reparar.substring(inicio);\n  }\n\n  let brackets_abiertos = 0;\n  let corchetes_abiertos = 0;\n  let en_string = false;\n  let escape = false;\n\n  for (let i = 0; i < texto_reparar.length; i++) {\n    const c = texto_reparar[i];\n    if (escape) { escape = false; continue; }\n    if (c === '\\\\') { escape = true; continue; }\n    if (c === '\"') { en_string = !en_string; continue; }\n    if (en_string) continue;\n    if (c === '{') brackets_abiertos++;\n    if (c === '}') brackets_abiertos--;\n    if (c === '[') corchetes_abiertos++;\n    if (c === ']') corchetes_abiertos--;\n  }\n\n  let cierre = \"\";\n  for (let i = 0; i < corchetes_abiertos; i++) cierre += \"]\";\n  for (let i = 0; i < brackets_abiertos; i++) cierre += \"}\";\n\n  if (en_string) {\n    texto_reparar += '\"';\n  }\n\n  texto_reparar += cierre;\n\n  try {\n    json_parseado = JSON.parse(texto_reparar);\n    fue_reparado = true;\n  } catch (e2) {\n    error_parseo = true;\n  }\n}\n\nif (error_parseo || !json_parseado) {\n  return [{\n    json: {\n      tarea: \"error_parseo\",\n      chat_id: chat_id,\n      nombre_usuario: nombre_usuario,\n      respuesta_cruda: respuesta_cruda\n    }\n  }];\n}\n\njson_parseado.chat_id = chat_id;\njson_parseado.nombre_usuario = nombre_usuario;\njson_parseado.fue_reparado = fue_reparado;\n\nif (json_parseado.tarea === \"banco_de_ejercicios\") {\n  if (!json_parseado.temas && json_parseado.topics) {\n    json_parseado.temas = json_parseado.topics.map(t => ({\n      nombre: t.name || t.nombre || t.topic || \"Sin nombre\",\n      ejercicios: (t.exercises || t.ejercicios || []).map(e => ({\n        nivel_dificultad: e.nivel_dificultad || e.difficulty || e.level || \"media\",\n        enunciado: e.enunciado || e.statement || e.question || \"\",\n        solucion: e.solucion || e.solution || e.answer || \"\",\n        notas_pedagogicas: e.notas_pedagogicas || e.notes || \"\"\n      }))\n    }));\n  }\n}\n\nreturn [{\n  json: json_parseado\n}];"
+        "jsCode": "const orquestador = $('Leer Orquestador').first().json;\n// Sin esquema el LLM escribe LaTeX con una sola barra (\\pm, \\sigma): se duplica toda barra\n// que no forme un escape válido de JSON; \\frac, \\bar, \\text los arregla corregirLatex\nconst respuesta_cruda = $input.first().json.message.content\n  .replace(/\\\\([\"\\\\/bfnrt]|u[0-9a-fA-F]{4})?/g, (m, valido) => valido ? m : \"\\\\\\\\\");\nconst chat_id = orquestador.chat_id;\nconst nombre_usuario = orquestador.nombre_usuario;\nconst DIAS = [\"lunes\", \"martes\", \"miércoles\", \"jueves\", \"viernes\", \"sábado\", \"domingo\"];\n\n// El LLM escribe \\frac sin escapar y en JSON llega como salto de página + \"rac\"\nfunction corregirLatex(valor) {\n  if (Array.isArray(valor)) return valor.map(corregirLatex);\n  if (valor && typeof valor === \"object\") {\n    return Object.fromEntries(Object.entries(valor).map(([k, v]) => [k, corregirLatex(v)]));\n  }\n  if (typeof valor !== \"string\") return valor;\n  return valor\n    .replace(/\\f/g, \"\\\\f\").replace(/\\t/g, \"\\\\t\").replace(/\\x08/g, \"\\\\b\").replace(/\\r/g, \"\\\\r\")\n    .replace(/\\n(?=(eq|u\\b|abla|ot\\b|eg\\b|ewline|leq|geq))/g, \"\\\\n\");\n}\n\n// Próxima fecha con ese día de la semana; nunca hoy (para hoy se dice \"hoy\")\nfunction proximo(dia) {\n  const hoy = DateTime.now().setZone(\"America/Bogota\").startOf(\"day\");\n  return hoy.plus({ days: (DIAS.indexOf(dia) - hoy.weekday + 7) % 7 + 1 }).toISODate();\n}\n\nlet json_parseado = null;\nlet error_parseo = false;\nlet fue_reparado = false;\n\ntry {\n  let texto_limpio = respuesta_cruda.trim();\n\n  if (texto_limpio.startsWith(\"```json\")) {\n    texto_limpio = texto_limpio.replace(/```json\\s*/g, \"\").replace(/```\\s*/g, \"\");\n  }\n  if (texto_limpio.startsWith(\"```\")) {\n    texto_limpio = texto_limpio.replace(/```\\s*/g, \"\");\n  }\n\n  const inicio = texto_limpio.indexOf(\"{\");\n  const fin = texto_limpio.lastIndexOf(\"}\");\n  if (inicio !== -1 && fin !== -1 && fin > inicio) {\n    texto_limpio = texto_limpio.substring(inicio, fin + 1);\n  }\n\n  json_parseado = JSON.parse(texto_limpio);\n} catch (e) {\n  let texto_reparar = respuesta_cruda.trim();\n  const inicio = texto_reparar.indexOf(\"{\");\n  if (inicio !== -1) {\n    texto_reparar = texto_reparar.substring(inicio);\n  }\n\n  let brackets_abiertos = 0;\n  let corchetes_abiertos = 0;\n  let en_string = false;\n  let escape = false;\n\n  for (let i = 0; i < texto_reparar.length; i++) {\n    const c = texto_reparar[i];\n    if (escape) { escape = false; continue; }\n    if (c === '\\\\') { escape = true; continue; }\n    if (c === '\"') { en_string = !en_string; continue; }\n    if (en_string) continue;\n    if (c === '{') brackets_abiertos++;\n    if (c === '}') brackets_abiertos--;\n    if (c === '[') corchetes_abiertos++;\n    if (c === ']') corchetes_abiertos--;\n  }\n\n  let cierre = \"\";\n  for (let i = 0; i < corchetes_abiertos; i++) cierre += \"]\";\n  for (let i = 0; i < brackets_abiertos; i++) cierre += \"}\";\n\n  if (en_string) {\n    texto_reparar += '\"';\n  }\n\n  texto_reparar += cierre;\n\n  try {\n    json_parseado = JSON.parse(texto_reparar);\n    fue_reparado = true;\n  } catch (e2) {\n    error_parseo = true;\n  }\n}\n\nif (error_parseo || !json_parseado) {\n  return [{\n    json: {\n      tarea: \"error_parseo\",\n      chat_id: chat_id,\n      nombre_usuario: nombre_usuario,\n      respuesta_cruda: respuesta_cruda\n    }\n  }];\n}\n\njson_parseado = corregirLatex(json_parseado);\nfor (const tema of json_parseado.temas || []) {\n  for (const ej of tema.ejercicios || []) {\n    const d = (ej.nivel_dificultad || \"\").normalize(\"NFD\").replace(/[\\u0300-\\u036f]/g, \"\").toLowerCase();\n    ej.nivel_dificultad = d.startsWith(\"f\") ? \"facil\" : d.startsWith(\"d\") ? \"dificil\" : \"media\";\n  }\n}\njson_parseado.tarea = orquestador.tarea;\njson_parseado.chat_id = chat_id;\njson_parseado.nombre_usuario = nombre_usuario;\njson_parseado.fue_reparado = fue_reparado;\njson_parseado.fuentes = $('Formatear Contexto RAG').isExecuted ? $('Formatear Contexto RAG').first().json.fuentes : [];\n\nif (DIAS.includes(json_parseado.dia_semana)) {\n  json_parseado.fecha = proximo(json_parseado.dia_semana);\n}\n\nreturn [{\n  json: json_parseado\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3360,
+        4480,
         -48
       ],
       "id": "e3665b89-b660-43a3-b9bf-8551535b10e3",
@@ -405,31 +398,6 @@
               },
               "renameOutput": true,
               "outputKey": "Planificar Clase"
-            },
-            {
-              "conditions": {
-                "options": {
-                  "caseSensitive": true,
-                  "leftValue": "",
-                  "typeValidation": "strict",
-                  "version": 3
-                },
-                "conditions": [
-                  {
-                    "id": "27cf6326-de98-441a-b9d1-57cebb5a65d7",
-                    "leftValue": "={{ $json.tarea }}",
-                    "rightValue": "aclarar",
-                    "operator": {
-                      "type": "string",
-                      "operation": "equals",
-                      "name": "filter.operator.equals"
-                    }
-                  }
-                ],
-                "combinator": "and"
-              },
-              "renameOutput": true,
-              "outputKey": "Aclarar"
             }
           ]
         },
@@ -440,7 +408,7 @@
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3.4,
       "position": [
-        3584,
+        4704,
         -96
       ],
       "id": "cf26289c-b514-4a2d-a179-f063257f373a",
@@ -448,12 +416,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const datos = $input.first().json;\nconst nivel = datos.nivel || \"universidad\";\n\nlet sesiones = [];\n\nif (datos.sesiones && Array.isArray(datos.sesiones)) {\n  sesiones = datos.sesiones;\n} else {\n  for (const key of Object.keys(datos)) {\n    if (key.startsWith(\"sesion\") || key.startsWith(\"session\")) {\n      const s = datos[key];\n      const num = parseInt(key.replace(/\\D/g, \"\")) || sesiones.length + 1;\n      sesiones.push({\n        numero: num,\n        titulo: s.titulo || s.tema || s.name || s.title || \"\",\n        temas: s.temas || s.topics || s.contenido || [],\n        objetivos: s.objetivos || s.objectives || [],\n        explicacion: s.explicacion || (s.contenido ? s.contenido.join(\"\\n• \") : \"\"),\n        recomendaciones_didacticas: s.recomendaciones_didacticas || s.recomendaciones || \"\",\n        ejemplos: s.ejemplos || s.examples || [],\n        actividades: s.actividades || s.activities || [],\n        duracion_minutos: s.duracion_minutos || 60\n      });\n    }\n  }\n}\n\nlet mensaje = `📚 *PLAN DE CLASES*\\n\\n`;\nmensaje += `📊 *Nivel:* ${nivel}\\n`;\nmensaje += `📅 *Sesiones:* ${sesiones.length}\\n`;\n\nif (datos.prerequisitos) {\n  mensaje += `\\n⚠️ *Prerequisitos:*\\n${datos.prerequisitos}\\n`;\n}\n\nfor (const sesion of sesiones) {\n  mensaje += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  mensaje += `📖 *Sesión ${sesion.numero}: ${sesion.titulo}*\\n`;\n  mensaje += `⏱ Duración: ${sesion.duracion_minutos} min\\n`;\n\n  if (sesion.temas && sesion.temas.length > 0) {\n    mensaje += `\\n📌 *Temas:*\\n`;\n    for (const tema of sesion.temas) {\n      mensaje += `  • ${tema}\\n`;\n    }\n  }\n\n  if (sesion.objetivos && sesion.objetivos.length > 0) {\n    mensaje += `\\n🎯 *Objetivos:*\\n`;\n    for (const obj of sesion.objetivos) {\n      mensaje += `  • ${obj}\\n`;\n    }\n  }\n\n  if (sesion.explicacion) {\n    mensaje += `\\n📝 *Desarrollo:*\\n${sesion.explicacion}\\n`;\n  }\n\n  if (sesion.ejemplos && sesion.ejemplos.length > 0) {\n    mensaje += `\\n📎 *Ejemplos:*\\n`;\n    for (const ej of sesion.ejemplos) {\n      mensaje += `  • ${ej}\\n`;\n    }\n  }\n\n  if (sesion.actividades && sesion.actividades.length > 0) {\n    mensaje += `\\n🔧 *Actividades:*\\n`;\n    for (const act of sesion.actividades) {\n      mensaje += `  • ${act}\\n`;\n    }\n  }\n\n  if (sesion.recomendaciones_didacticas) {\n    mensaje += `\\n💡 *Recomendaciones:*\\n${sesion.recomendaciones_didacticas}\\n`;\n  }\n}\n\nif (datos.fue_reparado) {\n  mensaje += `\\n\\n⚠️ _Nota: La respuesta fue truncada. Algunas sesiones pueden estar incompletas._`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje\n  }\n}];"
+        "jsCode": "const datos = $input.first().json;\nconst sesiones = datos.sesiones || [];\n\nlet mensaje = `📚 *Plan de Clases*\\nNivel: ${datos.nivel || \"universidad\"}\\n`;\nfor (const sesion of sesiones) {\n  mensaje += `\\n📖 Sesión ${sesion.numero}: ${sesion.titulo} (${sesion.duracion_minutos} min)`;\n}\nmensaje += `\\n\\n📄 _Enviando PDF con el plan completo..._`;\n\nif (datos.fue_reparado) {\n  mensaje += `\\n\\n⚠️ _Nota: La respuesta fue truncada. Algunas sesiones pueden estar incompletas._`;\n}\n\nconst fuentes = [...new Set((datos.fuentes || []).map(f => `\\`${f.archivo} p.${f.pagina}\\``))];\nif (fuentes.length > 0) {\n  mensaje += `\\n\\n📚 Basado en: ${fuentes.join(\" · \")}`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje,\n    datos_plan: {\n      nivel: datos.nivel,\n      prerequisitos: datos.prerequisitos,\n      sesiones: sesiones\n    }\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4032,
+        5152,
         -560
       ],
       "id": "01b16f84-1113-4e22-93c2-353bd7d4890c",
@@ -461,12 +429,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const datos = $input.first().json;\nconst temas = datos.temas || [];\nconst nivel = datos.nivel || \"universidad\";\n\nlet mensaje = `📝 *Banco de Ejercicios*\\nNivel: ${nivel}\\n`;\nlet total_ejercicios = 0;\n\nfor (const tema of temas) {\n  mensaje += `\\n━━━━━━━━━━━━━━━━━━\\n`;\n  mensaje += `*Tema: ${tema.nombre}*\\n`;\n\n  const ejercicios = tema.ejercicios || [];\n  total_ejercicios += ejercicios.length;\n\n  for (const ej of ejercicios) {\n    const icono = ej.nivel_dificultad === \"facil\" ? \"🟢\" :\n                  ej.nivel_dificultad === \"media\" ? \"🟡\" : \"🔴\";\n    mensaje += `${icono} ${ej.nivel_dificultad} — ${ej.enunciado.substring(0, 100)}...\\n`;\n  }\n}\n\nmensaje += `\\n📄 _Enviando PDF con ${total_ejercicios} ejercicios y soluciones completas..._`;\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje,\n    datos_ejercicios: {\n      nivel: datos.nivel,\n      temas: datos.temas\n    }\n  }\n}];"
+        "jsCode": "const datos = $input.first().json;\nconst temas = datos.temas || [];\nconst nivel = datos.nivel || \"universidad\";\n\nlet mensaje = `📝 *Banco de Ejercicios*\\nNivel: ${nivel}\\n`;\nlet total_ejercicios = 0;\n\nfor (const tema of temas) {\n  mensaje += `\\n━━━━━━━━━━━━━━━━━━\\n`;\n  mensaje += `*Tema: ${tema.nombre}*\\n`;\n\n  const ejercicios = tema.ejercicios || [];\n  total_ejercicios += ejercicios.length;\n\n  for (const ej of ejercicios) {\n    const icono = ej.nivel_dificultad === \"facil\" ? \"🟢\" :\n                  ej.nivel_dificultad === \"media\" ? \"🟡\" : \"🔴\";\n    mensaje += `${icono} ${ej.nivel_dificultad} — ${ej.enunciado.substring(0, 100)}...\\n`;\n  }\n}\n\nmensaje += `\\n📄 _Enviando PDF con ${total_ejercicios} ejercicios y soluciones completas..._`;\n\nconst fuentes = [...new Set((datos.fuentes || []).map(f => `\\`${f.archivo} p.${f.pagina}\\``))];\nif (fuentes.length > 0) {\n  mensaje += `\\n\\n📚 Basado en: ${fuentes.join(\" · \")}`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje,\n    datos_ejercicios: {\n      nivel: datos.nivel,\n      temas: datos.temas\n    }\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4032,
+        5152,
         -352
       ],
       "id": "15bffb89-516c-4384-b7a7-47b043937759",
@@ -479,7 +447,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4000,
+        5120,
         208
       ],
       "id": "88374e2a-c3ad-4902-851f-4b1a0065da29",
@@ -492,7 +460,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4000,
+        5120,
         400
       ],
       "id": "0bd343ca-d113-4177-8dbf-b613d00a331e",
@@ -505,7 +473,7 @@
       "type": "n8n-nodes-base.merge",
       "typeVersion": 3.2,
       "position": [
-        4608,
+        5728,
         -80
       ],
       "id": "5d49889f-2178-4efe-8b61-9ce25bef4100",
@@ -518,7 +486,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4880,
+        6000,
         -32
       ],
       "id": "ca3f34a5-1656-4fb3-bb0a-a171a9a5bbdd",
@@ -535,7 +503,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        5056,
+        6176,
         -32
       ],
       "id": "3ae5fd89-5548-49dc-90a4-0f1aec68d84b",
@@ -594,7 +562,7 @@
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.4,
       "position": [
-        4480,
+        5600,
         -352
       ],
       "id": "2037f7a1-fb0c-476a-8999-4a2e4c4cfb1c",
@@ -614,7 +582,7 @@
       "type": "n8n-nodes-base.telegram",
       "typeVersion": 1.2,
       "position": [
-        4880,
+        6000,
         -352
       ],
       "id": "90434ff4-425d-42bd-877c-b7473016ea82",
@@ -623,12 +591,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const datos = $input.first().json;\n\nconst estudiante = datos.estudiante || \"\";\nconst fecha = datos.fecha || \"\";\nconst hora_inicio = datos.hora_inicio || \"\";\nconst hora_fin = datos.hora_fin || \"\";\nconst modalidad = datos.modalidad || \"\";\n\nlet errores = [];\n\nif (!estudiante || estudiante === \"Nombre\") {\n  errores.push(\"nombre del estudiante\");\n}\n\nconst fecha_regex = /^\\d{4}-\\d{2}-\\d{2}$/;\nif (!fecha || !fecha_regex.test(fecha)) {\n  errores.push(\"fecha en formato YYYY-MM-DD\");\n}\n\nconst hora_regex = /^\\d{2}:\\d{2}$/;\nif (!hora_inicio || !hora_regex.test(hora_inicio)) {\n  errores.push(\"hora de inicio en formato HH:MM\");\n}\n\nif (!modalidad || (modalidad !== \"virtual\" && modalidad !== \"presencial\")) {\n  errores.push(\"modalidad (virtual o presencial)\");\n}\n\nlet hora_fin_final = hora_fin;\nif (!hora_fin || !hora_regex.test(hora_fin)) {\n  if (hora_inicio && hora_regex.test(hora_inicio)) {\n    const partes = hora_inicio.split(\":\");\n    let hora = parseInt(partes[0]) + 1;\n    if (hora > 23) hora = 23;\n    hora_fin_final = String(hora).padStart(2, '0') + \":\" + partes[1];\n  }\n}\n\nif (errores.length > 0) {\n  return [{\n    json: {\n      valido: false,\n      chat_id: datos.chat_id,\n      mensaje_error: `Para agendar la clase necesito que especifiques: ${errores.join(\", \")}.`\n    }\n  }];\n}\n\nconst fecha_inicio_iso = `${fecha}T${hora_inicio}:00`;\nconst fecha_fin_iso = `${fecha}T${hora_fin_final}:00`;\n\nreturn [{\n  json: {\n    valido: true,\n    chat_id: datos.chat_id,\n    nombre_usuario: datos.nombre_usuario,\n    estudiante: estudiante,\n    fecha: fecha,\n    hora_inicio: hora_inicio,\n    hora_fin: hora_fin_final,\n    modalidad: modalidad,\n    notas: datos.notas || \"\",\n    fecha_inicio_iso: fecha_inicio_iso,\n    fecha_fin_iso: fecha_fin_iso,\n    confirmacion: datos.confirmacion || \"\"\n  }\n}];"
+        "jsCode": "const datos = $input.first().json;\n\nconst estudiante = datos.estudiante || \"\";\nconst fecha = datos.fecha || \"\";\nconst hora_inicio = datos.hora_inicio || \"\";\nconst hora_fin = datos.hora_fin || \"\";\nconst modalidad = datos.modalidad || \"\";\n\nlet errores = [];\n\nif (!estudiante || estudiante === \"Nombre\") {\n  errores.push(\"nombre del estudiante\");\n}\n\nconst fecha_regex = /^\\d{4}-\\d{2}-\\d{2}$/;\nif (!fecha || !fecha_regex.test(fecha)) {\n  errores.push(\"fecha en formato YYYY-MM-DD\");\n}\n\nconst hora_regex = /^\\d{2}:\\d{2}$/;\nif (!hora_inicio || !hora_regex.test(hora_inicio)) {\n  errores.push(\"hora de inicio en formato HH:MM\");\n}\n\nconst modalidad_asumida = modalidad !== \"virtual\" && modalidad !== \"presencial\";\n\nlet hora_fin_final = hora_fin;\nif (!hora_fin || !hora_regex.test(hora_fin)) {\n  if (hora_inicio && hora_regex.test(hora_inicio)) {\n    const partes = hora_inicio.split(\":\");\n    let hora = parseInt(partes[0]) + 1;\n    if (hora > 23) hora = 23;\n    hora_fin_final = String(hora).padStart(2, '0') + \":\" + partes[1];\n  }\n}\n\nif (errores.length > 0) {\n  return [{\n    json: {\n      valido: false,\n      chat_id: datos.chat_id,\n      mensaje_error: `Para agendar la clase necesito que especifiques: ${errores.join(\", \")}.`\n    }\n  }];\n}\n\nconst fecha_inicio_iso = `${fecha}T${hora_inicio}:00`;\nconst fecha_fin_iso = `${fecha}T${hora_fin_final}:00`;\n\nreturn [{\n  json: {\n    valido: true,\n    chat_id: datos.chat_id,\n    nombre_usuario: datos.nombre_usuario,\n    estudiante: estudiante,\n    fecha: fecha,\n    hora_inicio: hora_inicio,\n    hora_fin: hora_fin_final,\n    modalidad: modalidad_asumida ? \"virtual\" : modalidad,\n    modalidad_asumida: modalidad_asumida,\n    notas: datos.notas || \"\",\n    fecha_inicio_iso: fecha_inicio_iso,\n    fecha_fin_iso: fecha_fin_iso,\n    confirmacion: datos.confirmacion || \"\"\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        3824,
+        4944,
         -48
       ],
       "id": "93385c15-d7d9-4430-a863-37ea101f1fc6",
@@ -662,7 +630,7 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        3968,
+        5088,
         -48
       ],
       "id": "ecf3592d-10af-4f04-a3dc-89d1372a7be4",
@@ -675,7 +643,7 @@
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4128,
+        5248,
         -32
       ],
       "id": "f69176fb-b54a-4e9d-bbfd-a049b8bb9893",
@@ -703,7 +671,7 @@
       "type": "n8n-nodes-base.googleCalendar",
       "typeVersion": 1.3,
       "position": [
-        4128,
+        5248,
         -160
       ],
       "id": "2c3807f6-3e80-4965-9338-3b5e130a7322",
@@ -711,12 +679,12 @@
     },
     {
       "parameters": {
-        "jsCode": "const evento = $input.first().json;\nconst datos_clase = $('Validar Datos Clase').first().json;\n\nconst estudiante = datos_clase.estudiante;\nconst fecha = datos_clase.fecha;\nconst hora_inicio = datos_clase.hora_inicio;\nconst hora_fin = datos_clase.hora_fin;\nconst modalidad = datos_clase.modalidad;\nconst notas = datos_clase.notas;\nconst chat_id = datos_clase.chat_id;\n\nlet meet_link = \"\";\nif (evento.conferenceData && evento.conferenceData.entryPoints) {\n  for (const ep of evento.conferenceData.entryPoints) {\n    if (ep.entryPointType === \"video\") {\n      meet_link = ep.uri;\n      break;\n    }\n  }\n}\nif (!meet_link && evento.hangoutLink) {\n  meet_link = evento.hangoutLink;\n}\n\nlet mensaje = `✅ *Clase Agendada Exitosamente*\\n\\n`;\nmensaje += `👤 *Estudiante:* ${estudiante}\\n`;\nmensaje += `📆 *Fecha:* ${fecha}\\n`;\nmensaje += `🕐 *Hora:* ${hora_inicio} - ${hora_fin}\\n`;\nmensaje += `📍 *Modalidad:* ${modalidad}\\n`;\n\nif (notas) {\n  mensaje += `📝 *Notas:* ${notas}\\n`;\n}\n\nif (meet_link) {\n  mensaje += `\\n🔗 *Enlace Google Meet:*\\n${meet_link}\\n`;\n  mensaje += `\\n_Comparte este enlace con ${estudiante} antes de la clase._`;\n} else if (modalidad === \"virtual\") {\n  mensaje += `\\n⚠️ _No se pudo generar el enlace de Meet automáticamente. Créalo manualmente desde Google Calendar._`;\n}\n\nif (evento.htmlLink) {\n  mensaje += `\\n\\n📅 [Ver en Google Calendar](${evento.htmlLink})`;\n}\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    mensaje: mensaje\n  }\n}];"
+        "jsCode": "const evento = $input.first().json;\nconst datos_clase = $('Validar Datos Clase').first().json;\n\nconst estudiante = datos_clase.estudiante;\nconst fecha = datos_clase.fecha;\nconst hora_inicio = datos_clase.hora_inicio;\nconst hora_fin = datos_clase.hora_fin;\nconst modalidad = datos_clase.modalidad;\nconst notas = datos_clase.notas;\nconst chat_id = datos_clase.chat_id;\n\nlet meet_link = \"\";\nif (evento.conferenceData && evento.conferenceData.entryPoints) {\n  for (const ep of evento.conferenceData.entryPoints) {\n    if (ep.entryPointType === \"video\") {\n      meet_link = ep.uri;\n      break;\n    }\n  }\n}\nif (!meet_link && evento.hangoutLink) {\n  meet_link = evento.hangoutLink;\n}\n\nlet mensaje = `✅ *Clase Agendada Exitosamente*\\n\\n`;\nmensaje += `👤 *Estudiante:* ${estudiante}\\n`;\nmensaje += `📆 *Fecha:* ${fecha}\\n`;\nmensaje += `🕐 *Hora:* ${hora_inicio} - ${hora_fin}\\n`;\nmensaje += `📍 *Modalidad:* ${modalidad}${datos_clase.modalidad_asumida ? \" (asumida)\" : \"\"}\\n`;\n\nif (notas) {\n  mensaje += `📝 *Notas:* ${notas}\\n`;\n}\n\nif (meet_link) {\n  mensaje += `\\n🔗 *Enlace Google Meet:*\\n${meet_link}\\n`;\n  mensaje += `\\n_Comparte este enlace con ${estudiante} antes de la clase._`;\n} else if (modalidad === \"virtual\") {\n  mensaje += `\\n⚠️ _No se pudo generar el enlace de Meet automáticamente. Créalo manualmente desde Google Calendar._`;\n}\n\nif (evento.htmlLink) {\n  mensaje += `\\n\\n📅 [Ver en Google Calendar](${evento.htmlLink})`;\n}\n\nreturn [{\n  json: {\n    chat_id: chat_id,\n    mensaje: mensaje\n  }\n}];"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
       "position": [
-        4272,
+        5392,
         -160
       ],
       "id": "cfdbc71c-bd59-4bae-b89f-3c3636cf3109",
@@ -739,9 +707,9 @@
     },
     {
       "parameters": {
-        "content": "## Generar consulta RAG y  conexión a chromaDB",
+        "content": "## 🧭 Orquestador\nDecide la tarea y escribe la consulta de búsqueda",
         "height": 400,
-        "width": 1312,
+        "width": 1100,
         "color": 5
       },
       "type": "n8n-nodes-base.stickyNote",
@@ -755,15 +723,15 @@
     },
     {
       "parameters": {
-        "content": "## Llamar qwen",
+        "content": "## Buscar en el material del tutor\nSolo plan y ejercicios; ejercicios filtra por tipo",
         "height": 400,
-        "width": 672,
+        "width": 1100,
         "color": 6
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        2864,
+        2656,
         -192
       ],
       "id": "5a69547a-411f-46d1-ac6b-d65f855cc00c",
@@ -779,7 +747,7 @@
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        3568,
+        4688,
         -800
       ],
       "id": "bd3b046f-eea5-41d4-8a77-f2ff068bd8b6",
@@ -788,17 +756,344 @@
     {
       "parameters": {
         "content": "## Enviar respuestas a Telegram",
-        "height": 672,
+        "height": 864,
         "width": 432
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
-        4848,
-        -448
+        5968,
+        -640
       ],
       "id": "c4211ddc-749e-4bc6-bf0f-65f882b1e56e",
       "name": "Sticky Note6"
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1,
+      "position": [
+        1000,
+        -144
+      ],
+      "id": "7f629a94-546b-4e43-9e63-304baaa517f3",
+      "name": "Extraer Texto PDF",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $input.first().json;\n\nconst sistema = `Eres el enrutador de un asistente para un tutor privado de matemáticas y estadística.\nLee el mensaje del tutor y elige la tarea:\n\n- plan_de_clases: pide un plan, programa, planificación o secuencia de sesiones para enseñar temas.\n- banco_de_ejercicios: pide ejercicios, problemas, talleres o evaluaciones.\n- planificar_clase: pide agendar, programar o reservar una clase con alguien en una fecha u hora.\n- aclarar: no se puede saber qué quiere.\n\nEn \"consulta\" escribe una búsqueda corta solo con los temas que el tutor menciona, sin añadir conceptos que no pidió\ny sin palabras como \"plan\", \"sesiones\" o \"ejercicios\".\nEjemplos: \"distribución de Poisson\" · \"intervalo de confianza para la media con varianza desconocida\".\nDeja \"consulta\" vacía si la tarea es planificar_clase o aclarar.\n\nEn \"mensaje\" escribe una pregunta breve y específica solo si la tarea es aclarar; en otro caso déjalo vacío.`;\n\nconst esquema = {\n  type: \"object\",\n  required: [\"tarea\", \"consulta\", \"mensaje\"],\n  properties: {\n    tarea: { enum: [\"plan_de_clases\", \"banco_de_ejercicios\", \"planificar_clase\", \"aclarar\"] },\n    consulta: { type: \"string\" },\n    mensaje: { type: \"string\" }\n  }\n};\n\nreturn [{\n  json: {\n    ollama_body_string: JSON.stringify({\n      model: $env.LLM_MODEL || \"qwen3:14b\",\n      messages: [\n        { role: \"system\", content: sistema },\n        { role: \"user\", content: datos.texto_usuario }\n      ],\n      stream: false,\n      think: false,\n      format: esquema,\n      options: { temperature: 0, num_ctx: 8192, num_predict: 512 }\n    })\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1792,
+        -48
+      ],
+      "id": "2a987a71-57cd-434a-af34-f4671d72267a",
+      "name": "🧭 Orquestador"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/chat",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ $json.ollama_body_string }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2016,
+        -48
+      ],
+      "id": "124607b3-8d6b-4468-912c-9dc39570d12a",
+      "name": "Llamar Orquestador",
+      "executeOnce": false,
+      "retryOnFail": false,
+      "alwaysOutputData": false,
+      "notesInFlow": false
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $('Normalizar Datos').first().json;\nconst orquestador = JSON.parse($input.first().json.message.content);\nconst tarea = orquestador.tarea;\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    nombre_usuario: datos.nombre_usuario,\n    texto_usuario: datos.texto_usuario,\n    tarea: tarea,\n    consulta: orquestador.consulta,\n    mensaje: orquestador.mensaje || \"¿Podrías darme más detalles de lo que necesitas?\",\n    tipos: tarea === \"banco_de_ejercicios\" ? [\"ejercicios\", \"evaluacion\"] : null,\n    necesita_rag: (tarea === \"plan_de_clases\" || tarea === \"banco_de_ejercicios\") && orquestador.consulta !== \"\"\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2240,
+        -48
+      ],
+      "id": "00716dd2-1c97-4ca9-a580-a9c522d9a400",
+      "name": "Leer Orquestador"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "2d3c6769-9a91-457e-a563-04010637b0f2",
+              "leftValue": "={{ $json.necesita_rag }}",
+              "rightValue": "true",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2464,
+        -48
+      ],
+      "id": "19b2b7fa-078c-4a2c-ac24-3bff047bb2fc",
+      "name": "¿Necesita RAG?"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('Leer Orquestador').first().json.tarea }}",
+                    "rightValue": "plan_de_clases",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b812c14a-1ba1-461c-bc32-13a9555895bb"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Planeador"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "5f94195b-c1c2-473e-b0f6-2204f558ad46",
+                    "leftValue": "={{ $('Leer Orquestador').first().json.tarea }}",
+                    "rightValue": "banco_de_ejercicios",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Ejercicios"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "9fa4e053-0b26-4e8a-94c5-5463a64d781a",
+                    "leftValue": "={{ $('Leer Orquestador').first().json.tarea }}",
+                    "rightValue": "planificar_clase",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Agendador"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "72b859c4-6fc0-4df3-a1a0-6a5fa44d3ae1",
+                    "leftValue": "={{ $('Leer Orquestador').first().json.tarea }}",
+                    "rightValue": "aclarar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Aclarar"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        3808,
+        -48
+      ],
+      "id": "8224dd61-8b8c-4d51-a43b-db062870e9a5",
+      "name": "Especialista"
+    },
+    {
+      "parameters": {
+        "jsCode": "const orquestador = $('Leer Orquestador').first().json;\nconst contexto = $json.contexto_rag ? `\\n\\nMATERIAL DEL TUTOR:\\n\\n${$json.contexto_rag}` : \"\";\nconst TEXTO = { type: \"string\" };\nconst LISTA = { type: \"array\", items: TEXTO };\nconst NIVEL = { enum: [\"secundaria\", \"universidad\", \"posgrado\"] };\nconst objeto = (campos) => ({ type: \"object\", required: Object.keys(campos), properties: campos });\n\nconst sistema = `Eres el asistente de un tutor privado de matemáticas y estadística. Sus estudiantes son de secundaria, universidad y posgrado; si no se indica el nivel, asume universidad.\n\nDiseña un plan de clases:\n- Objetivos con verbos de Bloom: identificar, explicar, aplicar, analizar, evaluar, crear.\n- La explicación debe servirle al tutor para recordar lo esencial: definiciones, fórmulas clave y un ejemplo numérico concreto.\n- En recomendaciones didácticas incluye errores comunes de los estudiantes, analogías útiles y el orden sugerido.\n- Fórmulas en LaTeX entre $...$.\n\nSi hay MATERIAL DEL TUTOR, úsalo como base: refleja el enfoque, la notación y los ejemplos que usa en sus tutorías.` + contexto;\n\nconst esquema = objeto({\n  nivel: NIVEL,\n  prerequisitos: TEXTO,\n  sesiones: {\n    type: \"array\", minItems: 1, items: objeto({\n      numero: { type: \"integer\" }, titulo: TEXTO, temas: LISTA, objetivos: LISTA,\n      explicacion: TEXTO, recomendaciones_didacticas: TEXTO, duracion_minutos: { type: \"integer\" }\n    })\n  }\n});\n\nreturn [{\n  json: {\n    ollama_body_string: JSON.stringify({\n      model: $env.LLM_MODEL || \"qwen3:14b\",\n      messages: [\n        { role: \"system\", content: sistema + \"\\n\\nResponde solo con un objeto JSON que cumpla este esquema:\\n\" + JSON.stringify(esquema) },\n        { role: \"user\", content: orquestador.texto_usuario }\n      ],\n      stream: false,\n      think: false,\n      options: { temperature: 0.2, num_ctx: 8192, num_predict: 4096 }\n    })\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        -240
+      ],
+      "id": "97c9b126-ecab-4520-829f-f0909c98a5fa",
+      "name": "📘 Planeador"
+    },
+    {
+      "parameters": {
+        "jsCode": "const orquestador = $('Leer Orquestador').first().json;\nconst contexto = $json.contexto_rag ? `\\n\\nMATERIAL DEL TUTOR:\\n\\n${$json.contexto_rag}` : \"\";\nconst TEXTO = { type: \"string\" };\nconst LISTA = { type: \"array\", items: TEXTO };\nconst NIVEL = { enum: [\"secundaria\", \"universidad\", \"posgrado\"] };\nconst objeto = (campos) => ({ type: \"object\", required: Object.keys(campos), properties: campos });\n\nconst sistema = `Eres el asistente de un tutor privado de matemáticas y estadística. Sus estudiantes son de secundaria, universidad y posgrado; si no se indica el nivel, asume universidad.\n\nCrea un banco de ejercicios:\n- Cada tema incluye los tres niveles de dificultad (facil, media, dificil), salvo que el tutor pida solo algunos.\n- Cantidad por nivel: la que indique el tutor (\"1 por nivel\" = 1 facil + 1 media + 1 dificil); si no indica, 2 por nivel.\n- Si el tutor pide un número total (\"1 ejercicio fácil\"), genera exactamente eso.\n- nivel es el nivel académico, no la dificultad: si el tutor no escribe \"secundaria\" o \"posgrado\", nivel = universidad. La dificultad debe ser coherente con ese nivel.\n- Enunciados con datos concretos y contexto realista.\n- Solución paso a paso con el resultado numérico final.\n- En notas pedagógicas: el error común que el ejercicio pone a prueba.\n- Toda expresión matemática en LaTeX entre $...$.\n\nSi hay MATERIAL DEL TUTOR, inspírate en el estilo, contextos y notación de sus talleres, sin copiarlos literalmente.` + contexto;\n\nconst esquema = objeto({\n  nivel: NIVEL,\n  temas: {\n    type: \"array\", minItems: 1, items: objeto({\n      nombre: TEXTO,\n      ejercicios: {\n        type: \"array\", minItems: 1, items: objeto({\n          nivel_dificultad: { enum: [\"facil\", \"media\", \"dificil\"] },\n          enunciado: TEXTO, solucion: TEXTO, notas_pedagogicas: TEXTO\n        })\n      }\n    })\n  }\n});\n\nreturn [{\n  json: {\n    ollama_body_string: JSON.stringify({\n      model: $env.LLM_MODEL || \"qwen3:14b\",\n      messages: [\n        { role: \"system\", content: sistema + \"\\n\\nResponde solo con un objeto JSON que cumpla este esquema:\\n\" + JSON.stringify(esquema) },\n        { role: \"user\", content: orquestador.texto_usuario }\n      ],\n      stream: false,\n      think: false,\n      options: { temperature: 0.2, num_ctx: 8192, num_predict: 4096 }\n    })\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        -48
+      ],
+      "id": "84f13d98-7d0b-4456-86cf-0538bb17e1d0",
+      "name": "📝 Ejercicios"
+    },
+    {
+      "parameters": {
+        "jsCode": "const orquestador = $('Leer Orquestador').first().json;\nconst DIAS = [\"lunes\", \"martes\", \"miércoles\", \"jueves\", \"viernes\", \"sábado\", \"domingo\"];\nconst TEXTO = { type: \"string\" };\n\nconst hoy = DateTime.now().setZone(\"America/Bogota\").startOf(\"day\");\nconst calendario = Array.from({ length: 14 }, (_, i) => {\n  const dia = hoy.plus({ days: i });\n  return `- ${DIAS[dia.weekday - 1]} ${dia.toISODate()}` + (i === 0 ? \" (hoy)\" : \"\");\n}).join(\"\\n\");\n\nconst sistema = `Extrae los datos para agendar una clase de tutoría.\nZona horaria America/Bogota. Calendario de los próximos días:\n${calendario}\n\n- dia_semana: si el tutor nombra un día de la semana (\"el miércoles\", \"el próximo viernes\"), ese día en minúsculas; si no, vacío.\n- fecha en formato AAAA-MM-DD, tomada del calendario, cuando el tutor da una fecha o dice hoy, mañana o pasado mañana.\n- hora_inicio y hora_fin en formato 24 h HH:MM; si no se indica la hora de fin, suma 1 hora.\n- modalidad: virtual, presencial o no_indicada si el tutor no la menciona.\n- estudiante: el nombre tal como lo escribe el tutor; vacío si no lo dice.\n- confirmacion: una frase legible con el resumen de la clase.`;\n\nconst esquema = {\n  type: \"object\",\n  required: [\"estudiante\", \"dia_semana\", \"fecha\", \"hora_inicio\", \"hora_fin\", \"modalidad\", \"notas\", \"confirmacion\"],\n  properties: {\n    estudiante: TEXTO, dia_semana: { enum: [...DIAS, \"\"] }, fecha: TEXTO, hora_inicio: TEXTO, hora_fin: TEXTO,\n    modalidad: { enum: [\"virtual\", \"presencial\", \"no_indicada\"] }, notas: TEXTO, confirmacion: TEXTO\n  }\n};\n\nreturn [{\n  json: {\n    ollama_body_string: JSON.stringify({\n      model: $env.LLM_MODEL || \"qwen3:14b\",\n      messages: [\n        { role: \"system\", content: sistema },\n        { role: \"user\", content: orquestador.texto_usuario }\n      ],\n      stream: false,\n      think: false,\n      format: esquema,\n      options: { temperature: 0, num_ctx: 8192, num_predict: 4096 }\n    })\n  }\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4032,
+        144
+      ],
+      "id": "6b91569d-5537-4739-838e-2b4a1782efd9",
+      "name": "📅 Agendador"
+    },
+    {
+      "parameters": {
+        "content": "## Especialistas\nCada uno con su prompt y esquema JSON; comparten la llamada a qwen",
+        "height": 784,
+        "width": 912,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3776,
+        -432
+      ],
+      "id": "3a1a7fc9-f769-4f0a-bd35-927da1ddfeec",
+      "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://latex-renderer:5001/plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.datos_plan) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5600,
+        -560
+      ],
+      "id": "c1080c7c-c706-4d65-8f81-0f761746e574",
+      "name": "Generar PDF Plan",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Formato Plan').first().json.chat_id }}",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "📚 Plan de clases",
+          "fileName": "plan.pdf"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6000,
+        -560
+      ],
+      "id": "1fd5f3d5-a102-41fa-b312-2bbb496b42c8",
+      "name": "Enviar PDF Plan",
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -900,7 +1195,7 @@
       "main": [
         [
           {
-            "node": "Procesar Archivo",
+            "node": "Extraer Texto PDF",
             "type": "main",
             "index": 0
           }
@@ -933,7 +1228,7 @@
       "main": [
         [
           {
-            "node": "Embedding Pregunta",
+            "node": "🧭 Orquestador",
             "type": "main",
             "index": 0
           }
@@ -988,18 +1283,7 @@
       "main": [
         [
           {
-            "node": "Construir Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Construir Prompt": {
-      "main": [
-        [
-          {
-            "node": "Llamar Ollama",
+            "node": "Especialista",
             "type": "main",
             "index": 0
           }
@@ -1053,13 +1337,6 @@
         ],
         [
           {
-            "node": "Formato Aclarar",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
             "node": "Formato Error",
             "type": "main",
             "index": 0
@@ -1081,6 +1358,11 @@
     "Formato Plan": {
       "main": [
         [
+          {
+            "node": "Generar PDF Plan",
+            "type": "main",
+            "index": 0
+          },
           {
             "node": "Unir Respuestas",
             "type": "main",
@@ -1214,6 +1496,149 @@
             "index": 2
           }
         ]
+      ]
+    },
+    "Extraer Texto PDF": {
+      "main": [
+        [
+          {
+            "node": "Procesar Archivo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "🧭 Orquestador": {
+      "main": [
+        [
+          {
+            "node": "Llamar Orquestador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Llamar Orquestador": {
+      "main": [
+        [
+          {
+            "node": "Leer Orquestador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Leer Orquestador": {
+      "main": [
+        [
+          {
+            "node": "¿Necesita RAG?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Necesita RAG?": {
+      "main": [
+        [
+          {
+            "node": "Embedding Pregunta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Especialista",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Especialista": {
+      "main": [
+        [
+          {
+            "node": "📘 Planeador",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📝 Ejercicios",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "📅 Agendador",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Formato Aclarar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📘 Planeador": {
+      "main": [
+        [
+          {
+            "node": "Llamar Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📝 Ejercicios": {
+      "main": [
+        [
+          {
+            "node": "Llamar Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "📅 Agendador": {
+      "main": [
+        [
+          {
+            "node": "Llamar Ollama",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generar PDF Plan": {
+      "main": [
+        [
+          {
+            "node": "Enviar PDF Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar PDF Plan": {
+      "main": [
+        []
       ]
     }
   },

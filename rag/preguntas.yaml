@@ -1,0 +1,50 @@
+- pregunta: ¿Cómo se calcula un intervalo de confianza para la diferencia de medias?
+  esperado: [Intervalos de confianza, 08_Interval]
+- pregunta: Spearman rank correlation with ties
+  esperado: [Spearman correlation, StExercises4]
+- pregunta: función generadora de momentos conjunta
+  esperado: [lfgrajalesh]
+- pregunta: covarianza en la distribución multinomial
+  esperado: [lfgrajalesh]
+- pregunta: ejercicio de distribución de Poisson
+  esperado: [POISSON, 7. Guía, 03_DistributionsDsc]
+- pregunta: ejercicios de distribución geométrica y binomial negativa
+  esperado: [GEOMETRICA, 03_DistributionsDsc]
+- pregunta: ejercicio con la distribución t de Student
+  esperado: [TESTUDENT, 06_Sampling, 08_Interval]
+- pregunta: distribución del mínimo y del máximo de una muestra
+  esperado: [Estadísticos de orden, Estadísticos de Orden]
+- pregunta: distribuciones Weibull, lognormal y beta
+  esperado: [Weibull]
+- pregunta: estimador insesgado y eficiencia relativa
+  esperado: [Estimadores, 07_Estimators]
+- pregunta: central limit theorem
+  esperado: [05_LimitTheorems]
+- pregunta: Cramér's V for a contingency table
+  esperado: [VCramer]
+- pregunta: Wilcoxon rank sum test
+  esperado: [10_Nonparametric, as 2410, 3 Sesión]
+- pregunta: pruebas no paramétricas para la mediana
+  esperado: [3 Sesión, 10_Nonparametric]
+- pregunta: tabla ANOVA de un factor
+  esperado: [ANOVA, as 2410]
+- pregunta: prueba chi-cuadrado de independencia para variables categóricas
+  esperado: [4 sesión, VCramer]
+- pregunta: autocorrelación y prueba de rachas en series de tiempo
+  esperado: [Series de tiempo]
+- pregunta: coeficiente de correlación de Pearson y regresión lineal simple
+  esperado: [Lectura fundamental, Lecture2_correlation, 5 Sesión, Ejercicios de aplicación]
+- pregunta: Bayes theorem
+  esperado: [Bayes, 01_Probability]
+- pregunta: eventos mutuamente excluyentes y probabilidad
+  esperado: [5. Guía, 01_Probability]
+- pregunta: distribución exponencial y tiempo de espera
+  esperado: [8. Guía, 04_DistributionsCont]
+- pregunta: ejercicio de distribución gamma
+  esperado: [Taller Gamma]
+- pregunta: ejercicios de matrices para análisis multivariado
+  esperado: [matrices-multivariado]
+- pregunta: error tipo I, error tipo II y potencia de la prueba
+  esperado: [09_Testing, "2025-06-05"]
+- pregunta: valor esperado de una combinación lineal de variables aleatorias
+  esperado: [Sesión 13, 02_RandomVariables]

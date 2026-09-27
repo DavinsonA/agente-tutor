@@ -3,7 +3,7 @@ import os
 import requests
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
+EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "bge-m3")
 CHROMA_URL = os.getenv("CHROMA_URL", "http://localhost:8000")
 COLECCION = os.getenv("COLECCION", "tutorias")
 

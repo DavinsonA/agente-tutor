@@ -1,98 +1,119 @@
 import io
 import re
+import subprocess
+import tempfile
+from pathlib import Path
 
-import matplotlib
-
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
 from flask import Flask, request, send_file
-from fpdf import FPDF
 
 app = Flask(__name__)
 
-DIFICULTAD = {
-    "facil": ("Fácil", (76, 175, 80)),
-    "media": ("Media", (255, 152, 0)),
-    "dificil": ("Difícil", (244, 67, 54)),
-}
+PREAMBULO = r"""\documentclass[11pt]{article}
+\usepackage[margin=2cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{xcolor}
+\usepackage{fancyhdr}
+\pagestyle{fancy}\fancyhf{}\cfoot{\thepage}\renewcommand{\headrulewidth}{0pt}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\definecolor{facil}{RGB}{76,175,80}\definecolor{media}{RGB}{255,152,0}\definecolor{dificil}{RGB}{244,67,54}
+\begin{document}
+"""
+ETIQUETAS = {"facil": "Fácil", "media": "Media", "dificil": "Difícil"}
+MATEMATICA = re.compile(r"(\$\$.+?\$\$|\$.+?\$|\\\(.+?\\\)|\\\[.+?\\\])", re.S)
+ESCAPES = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "#": r"\#", "_": r"\_",
+           "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}", "$": r"\$"}
+# La fuente no trae griegas: el LLM a veces escribe "λ" suelta y en el PDF desaparece
+GRIEGAS = {"α": "alpha", "β": "beta", "γ": "gamma", "δ": "delta", "ε": "varepsilon", "θ": "theta",
+           "λ": "lambda", "μ": "mu", "µ": "mu", "π": "pi", "ρ": "rho", "σ": "sigma", "τ": "tau",
+           "φ": "phi", "χ": "chi", "ω": "omega", "Γ": "Gamma", "Δ": "Delta", "Λ": "Lambda",
+           "Σ": "Sigma", "Φ": "Phi", "Ω": "Omega"}
+ESCAPES.update({c: f"$\\{nombre}$" for c, nombre in GRIEGAS.items()})
 
 
-class PDF(FPDF):
-    def header(self):
-        self.set_font("Helvetica", "B", 14)
-        self.cell(0, 10, "Banco de Ejercicios", align="C", new_x="LMARGIN", new_y="NEXT")
-        self.ln(5)
-
-    def footer(self):
-        self.set_y(-15)
-        self.set_font("Helvetica", "I", 8)
-        self.cell(0, 10, f"Página {self.page_no()}/{{nb}}", align="C")
+def escapar(texto):
+    return "".join(ESCAPES.get(c, c) for c in texto)
 
 
-def latex_png(expr):
-    fig = plt.figure()
-    fig.text(0, 0, f"${expr}$", fontsize=14)
-    buf = io.BytesIO()
-    try:
-        fig.savefig(buf, format="png", dpi=150, bbox_inches="tight", pad_inches=0.05, facecolor="white")
-    except Exception:
-        return None
-    finally:
-        plt.close(fig)
-    buf.seek(0)
-    return buf
+def griegas_en_formula(formula):
+    return "".join(f"\\{GRIEGAS[c]} " if c in GRIEGAS else c for c in formula)
 
 
-def texto_mixto(pdf, texto):
-    for parte in re.split(r"(\$\$[^$]+\$\$|\$[^$]+\$)", texto):
-        if not parte.strip():
-            continue
-        if parte.startswith("$"):
-            img = latex_png(parte.strip("$"))
-            if img:
-                pdf.image(img, h=8)
-                pdf.set_x(pdf.l_margin)
-                continue
-        pdf.set_font("Helvetica", "", 11)
-        pdf.multi_cell(0, 6, parte.strip(), new_x="LMARGIN", new_y="NEXT")
+def balanceada(formula):
+    sin_escapes = formula.replace(r"\{", "").replace(r"\}", "")
+    return (sin_escapes.count("{") == sin_escapes.count("}")
+            and formula.count(r"\begin{") == formula.count(r"\end{"))
 
 
-def seccion(pdf, titulo, texto):
-    pdf.set_font("Helvetica", "B", 10)
-    pdf.cell(0, 6, titulo, new_x="LMARGIN", new_y="NEXT")
-    texto_mixto(pdf, texto)
-    pdf.ln(2)
+def mixto(texto, con_matematica=True):
+    partes = []
+    for parte in MATEMATICA.split(texto or ""):
+        if MATEMATICA.fullmatch(parte):
+            valida = con_matematica and balanceada(parte)
+            partes.append(griegas_en_formula(parte) if valida else r"\texttt{" + escapar(parte) + "}")
+        else:
+            partes.append(escapar(parte).replace("\n", "\n\n"))
+    return "".join(partes)
 
 
-def generar_pdf(datos):
-    pdf = PDF()
-    pdf.alias_nb_pages()
-    pdf.set_auto_page_break(auto=True, margin=20)
-    pdf.add_page()
-    pdf.set_font("Helvetica", "", 11)
-    pdf.cell(0, 8, f"Nivel: {datos.get('nivel', 'universidad').capitalize()}", new_x="LMARGIN", new_y="NEXT")
-
+def documento(datos, con_matematica=True):
+    t = lambda x: mixto(x, con_matematica)
+    cuerpo = [r"\begin{center}{\Large\bfseries Banco de Ejercicios}\end{center}",
+              f"Nivel: {escapar(datos.get('nivel', 'universidad').capitalize())}"]
     for tema in datos.get("temas", []):
-        pdf.set_font("Helvetica", "B", 13)
-        pdf.set_fill_color(230, 230, 250)
-        pdf.cell(0, 10, f"  {tema.get('nombre', '')}", fill=True, new_x="LMARGIN", new_y="NEXT")
-        pdf.ln(3)
+        cuerpo.append(r"\section*{" + escapar(tema.get("nombre", "")) + "}")
         for i, ej in enumerate(tema.get("ejercicios", []), 1):
-            etiqueta, color = DIFICULTAD.get(ej.get("nivel_dificultad"), DIFICULTAD["media"])
-            if pdf.get_y() > 240:
-                pdf.add_page()
-            pdf.set_font("Helvetica", "B", 11)
-            pdf.set_text_color(*color)
-            pdf.cell(0, 7, f"Ejercicio {i} [{etiqueta}]", new_x="LMARGIN", new_y="NEXT")
-            pdf.set_text_color(0, 0, 0)
-            seccion(pdf, "Enunciado:", ej.get("enunciado", ""))
-            seccion(pdf, "Solución:", ej.get("solucion", ""))
+            nivel = ej.get("nivel_dificultad") if ej.get("nivel_dificultad") in ETIQUETAS else "media"
+            cuerpo += [
+                r"\subsection*{\textcolor{" + nivel + "}{Ejercicio " + str(i) + " [" + ETIQUETAS[nivel] + "]}}",
+                r"\textbf{Enunciado:} " + t(ej.get("enunciado")),
+                r"\textbf{Solución:} " + t(ej.get("solucion")),
+            ]
             if ej.get("notas_pedagogicas"):
-                seccion(pdf, "Notas pedagógicas:", ej["notas_pedagogicas"])
-            pdf.line(pdf.l_margin, pdf.get_y(), pdf.w - pdf.r_margin, pdf.get_y())
-            pdf.ln(5)
+                cuerpo.append(r"\textbf{Notas pedagógicas:} \textit{" + t(ej["notas_pedagogicas"]) + "}")
+            cuerpo.append(r"\noindent\rule{\linewidth}{0.4pt}")
+    return PREAMBULO + "\n\n".join(cuerpo) + "\n\\end{document}\n"
 
-    return io.BytesIO(pdf.output())
+
+def plan(datos, con_matematica=True):
+    t = lambda x: mixto(x, con_matematica)
+    lista = lambda xs: r"\begin{itemize}" + "".join(r"\item " + t(x) + "\n" for x in xs) + r"\end{itemize}"
+    cuerpo = [r"\begin{center}{\Large\bfseries Plan de Clases}\end{center}",
+              f"Nivel: {escapar(datos.get('nivel', 'universidad').capitalize())}"]
+    if datos.get("prerequisitos"):
+        cuerpo.append(r"\textbf{Prerrequisitos:} " + t(datos["prerequisitos"]))
+    for s in datos.get("sesiones", []):
+        cuerpo.append(r"\section*{Sesión " + str(s.get("numero", "")) + ": " + t(s.get("titulo", "")) + "}")
+        cuerpo.append(r"\textit{Duración: " + str(s.get("duracion_minutos", 60)) + " min}")
+        if s.get("temas"):
+            cuerpo.append(r"\textbf{Temas:}" + lista(s["temas"]))
+        if s.get("objetivos"):
+            cuerpo.append(r"\textbf{Objetivos:}" + lista(s["objetivos"]))
+        if s.get("explicacion"):
+            cuerpo.append(r"\textbf{Desarrollo:} " + t(s["explicacion"]))
+        if s.get("recomendaciones_didacticas"):
+            cuerpo.append(r"\textbf{Recomendaciones:} " + t(s["recomendaciones_didacticas"]))
+    return PREAMBULO + "\n\n".join(cuerpo) + "\n\\end{document}\n"
+
+
+def compilar(tex):
+    with tempfile.TemporaryDirectory() as tmp:
+        fuente = Path(tmp) / "ejercicios.tex"
+        fuente.write_text(tex, encoding="utf-8")
+        r = subprocess.run(["tectonic", str(fuente)], capture_output=True, text=True, timeout=300)
+        pdf = fuente.with_suffix(".pdf")
+        if r.returncode != 0:
+            print(r.stderr[-500:], flush=True)
+        return pdf.read_bytes() if r.returncode == 0 and pdf.exists() else None
+
+
+def precalentar():
+    formulas = (r"$\mathbf{x} \in \mathbb{R}^n$, $\bar{X}$, $\hat{\theta}$, $\sqrt{n}$, $\sum_{i=1}^n x_i$, "
+                r"$$\int_0^\infty e^{-x}dx \quad \begin{aligned} a &= b \\ c &\leq d \end{aligned}$$")
+    ejemplo = {"temas": [{"nombre": "x", "ejercicios": [
+        {"nivel_dificultad": n, "enunciado": formulas, "solucion": formulas, "notas_pedagogicas": formulas}
+        for n in ETIQUETAS]}]}
+    for con_matematica in (True, False):
+        assert compilar(documento(ejemplo, con_matematica))
 
 
 @app.get("/health")
@@ -100,12 +121,24 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/render")
-def render():
+def responder(generar, nombre):
     datos = request.get_json(silent=True)
     if not datos:
         return {"error": "No se recibieron datos"}, 400
-    return send_file(generar_pdf(datos), mimetype="application/pdf", download_name="ejercicios.pdf")
+    pdf = compilar(generar(datos)) or compilar(generar(datos, con_matematica=False))
+    if not pdf:
+        return {"error": "No se pudo compilar el LaTeX"}, 500
+    return send_file(io.BytesIO(pdf), mimetype="application/pdf", download_name=nombre)
+
+
+@app.post("/render")
+def render():
+    return responder(documento, "ejercicios.pdf")
+
+
+@app.post("/plan")
+def render_plan():
+    return responder(plan, "plan.pdf")
 
 
 if __name__ == "__main__":
