@@ -57,7 +57,7 @@ def construir_chunks(raiz):
 
 def para_embeber(c):
     m = c["meta"]
-    return f"search_document: {m['curso']} | {m['archivo']} | {m['seccion']}\n{c['texto']}"
+    return f"{m['curso']} | {m['archivo']} | {m['seccion']}\n{c['texto']}"
 
 
 def main():
