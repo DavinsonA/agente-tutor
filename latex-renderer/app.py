@@ -22,10 +22,20 @@ ETIQUETAS = {"facil": "Fácil", "media": "Media", "dificil": "Difícil"}
 MATEMATICA = re.compile(r"(\$\$.+?\$\$|\$.+?\$|\\\(.+?\\\)|\\\[.+?\\\])", re.S)
 ESCAPES = {"\\": r"\textbackslash{}", "&": r"\&", "%": r"\%", "#": r"\#", "_": r"\_",
            "{": r"\{", "}": r"\}", "~": r"\textasciitilde{}", "^": r"\textasciicircum{}", "$": r"\$"}
+# La fuente no trae griegas: el LLM a veces escribe "λ" suelta y en el PDF desaparece
+GRIEGAS = {"α": "alpha", "β": "beta", "γ": "gamma", "δ": "delta", "ε": "varepsilon", "θ": "theta",
+           "λ": "lambda", "μ": "mu", "µ": "mu", "π": "pi", "ρ": "rho", "σ": "sigma", "τ": "tau",
+           "φ": "phi", "χ": "chi", "ω": "omega", "Γ": "Gamma", "Δ": "Delta", "Λ": "Lambda",
+           "Σ": "Sigma", "Φ": "Phi", "Ω": "Omega"}
+ESCAPES.update({c: f"$\\{nombre}$" for c, nombre in GRIEGAS.items()})
 
 
 def escapar(texto):
     return "".join(ESCAPES.get(c, c) for c in texto)
+
+
+def griegas_en_formula(formula):
+    return "".join(f"\\{GRIEGAS[c]} " if c in GRIEGAS else c for c in formula)
 
 
 def balanceada(formula):
@@ -39,7 +49,7 @@ def mixto(texto, con_matematica=True):
     for parte in MATEMATICA.split(texto or ""):
         if MATEMATICA.fullmatch(parte):
             valida = con_matematica and balanceada(parte)
-            partes.append(parte if valida else r"\texttt{" + escapar(parte) + "}")
+            partes.append(griegas_en_formula(parte) if valida else r"\texttt{" + escapar(parte) + "}")
         else:
             partes.append(escapar(parte).replace("\n", "\n\n"))
     return "".join(partes)
@@ -61,6 +71,27 @@ def documento(datos, con_matematica=True):
             if ej.get("notas_pedagogicas"):
                 cuerpo.append(r"\textbf{Notas pedagógicas:} \textit{" + t(ej["notas_pedagogicas"]) + "}")
             cuerpo.append(r"\noindent\rule{\linewidth}{0.4pt}")
+    return PREAMBULO + "\n\n".join(cuerpo) + "\n\\end{document}\n"
+
+
+def plan(datos, con_matematica=True):
+    t = lambda x: mixto(x, con_matematica)
+    lista = lambda xs: r"\begin{itemize}" + "".join(r"\item " + t(x) + "\n" for x in xs) + r"\end{itemize}"
+    cuerpo = [r"\begin{center}{\Large\bfseries Plan de Clases}\end{center}",
+              f"Nivel: {escapar(datos.get('nivel', 'universidad').capitalize())}"]
+    if datos.get("prerequisitos"):
+        cuerpo.append(r"\textbf{Prerrequisitos:} " + t(datos["prerequisitos"]))
+    for s in datos.get("sesiones", []):
+        cuerpo.append(r"\section*{Sesión " + str(s.get("numero", "")) + ": " + t(s.get("titulo", "")) + "}")
+        cuerpo.append(r"\textit{Duración: " + str(s.get("duracion_minutos", 60)) + " min}")
+        if s.get("temas"):
+            cuerpo.append(r"\textbf{Temas:}" + lista(s["temas"]))
+        if s.get("objetivos"):
+            cuerpo.append(r"\textbf{Objetivos:}" + lista(s["objetivos"]))
+        if s.get("explicacion"):
+            cuerpo.append(r"\textbf{Desarrollo:} " + t(s["explicacion"]))
+        if s.get("recomendaciones_didacticas"):
+            cuerpo.append(r"\textbf{Recomendaciones:} " + t(s["recomendaciones_didacticas"]))
     return PREAMBULO + "\n\n".join(cuerpo) + "\n\\end{document}\n"
 
 
@@ -90,15 +121,24 @@ def health():
     return {"status": "ok"}
 
 
-@app.post("/render")
-def render():
+def responder(generar, nombre):
     datos = request.get_json(silent=True)
     if not datos:
         return {"error": "No se recibieron datos"}, 400
-    pdf = compilar(documento(datos)) or compilar(documento(datos, con_matematica=False))
+    pdf = compilar(generar(datos)) or compilar(generar(datos, con_matematica=False))
     if not pdf:
         return {"error": "No se pudo compilar el LaTeX"}, 500
-    return send_file(io.BytesIO(pdf), mimetype="application/pdf", download_name="ejercicios.pdf")
+    return send_file(io.BytesIO(pdf), mimetype="application/pdf", download_name=nombre)
+
+
+@app.post("/render")
+def render():
+    return responder(documento, "ejercicios.pdf")
+
+
+@app.post("/plan")
+def render_plan():
+    return responder(plan, "plan.pdf")
 
 
 if __name__ == "__main__":

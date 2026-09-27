@@ -441,7 +441,7 @@
     },
     {
       "parameters": {
-        "jsCode": "const datos = $input.first().json;\nconst nivel = datos.nivel || \"universidad\";\n\nlet sesiones = [];\n\nif (datos.sesiones && Array.isArray(datos.sesiones)) {\n  sesiones = datos.sesiones;\n} else {\n  for (const key of Object.keys(datos)) {\n    if (key.startsWith(\"sesion\") || key.startsWith(\"session\")) {\n      const s = datos[key];\n      const num = parseInt(key.replace(/\\D/g, \"\")) || sesiones.length + 1;\n      sesiones.push({\n        numero: num,\n        titulo: s.titulo || s.tema || s.name || s.title || \"\",\n        temas: s.temas || s.topics || s.contenido || [],\n        objetivos: s.objetivos || s.objectives || [],\n        explicacion: s.explicacion || (s.contenido ? s.contenido.join(\"\\n• \") : \"\"),\n        recomendaciones_didacticas: s.recomendaciones_didacticas || s.recomendaciones || \"\",\n        ejemplos: s.ejemplos || s.examples || [],\n        actividades: s.actividades || s.activities || [],\n        duracion_minutos: s.duracion_minutos || 60\n      });\n    }\n  }\n}\n\nlet mensaje = `📚 *PLAN DE CLASES*\\n\\n`;\nmensaje += `📊 *Nivel:* ${nivel}\\n`;\nmensaje += `📅 *Sesiones:* ${sesiones.length}\\n`;\n\nif (datos.prerequisitos) {\n  mensaje += `\\n⚠️ *Prerequisitos:*\\n${datos.prerequisitos}\\n`;\n}\n\nfor (const sesion of sesiones) {\n  mensaje += `\\n━━━━━━━━━━━━━━━━━━━━━\\n`;\n  mensaje += `📖 *Sesión ${sesion.numero}: ${sesion.titulo}*\\n`;\n  mensaje += `⏱ Duración: ${sesion.duracion_minutos} min\\n`;\n\n  if (sesion.temas && sesion.temas.length > 0) {\n    mensaje += `\\n📌 *Temas:*\\n`;\n    for (const tema of sesion.temas) {\n      mensaje += `  • ${tema}\\n`;\n    }\n  }\n\n  if (sesion.objetivos && sesion.objetivos.length > 0) {\n    mensaje += `\\n🎯 *Objetivos:*\\n`;\n    for (const obj of sesion.objetivos) {\n      mensaje += `  • ${obj}\\n`;\n    }\n  }\n\n  if (sesion.explicacion) {\n    mensaje += `\\n📝 *Desarrollo:*\\n${sesion.explicacion}\\n`;\n  }\n\n  if (sesion.ejemplos && sesion.ejemplos.length > 0) {\n    mensaje += `\\n📎 *Ejemplos:*\\n`;\n    for (const ej of sesion.ejemplos) {\n      mensaje += `  • ${ej}\\n`;\n    }\n  }\n\n  if (sesion.actividades && sesion.actividades.length > 0) {\n    mensaje += `\\n🔧 *Actividades:*\\n`;\n    for (const act of sesion.actividades) {\n      mensaje += `  • ${act}\\n`;\n    }\n  }\n\n  if (sesion.recomendaciones_didacticas) {\n    mensaje += `\\n💡 *Recomendaciones:*\\n${sesion.recomendaciones_didacticas}\\n`;\n  }\n}\n\nif (datos.fue_reparado) {\n  mensaje += `\\n\\n⚠️ _Nota: La respuesta fue truncada. Algunas sesiones pueden estar incompletas._`;\n}\n\nconst fuentes = [...new Set((datos.fuentes || []).map(f => `\\`${f.archivo} p.${f.pagina}\\``))];\nif (fuentes.length > 0) {\n  mensaje += `\\n\\n📚 Basado en: ${fuentes.join(\" · \")}`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje\n  }\n}];"
+        "jsCode": "const datos = $input.first().json;\nconst sesiones = datos.sesiones || [];\n\nlet mensaje = `📚 *Plan de Clases*\\nNivel: ${datos.nivel || \"universidad\"}\\n`;\nfor (const sesion of sesiones) {\n  mensaje += `\\n📖 Sesión ${sesion.numero}: ${sesion.titulo} (${sesion.duracion_minutos} min)`;\n}\nmensaje += `\\n\\n📄 _Enviando PDF con el plan completo..._`;\n\nif (datos.fue_reparado) {\n  mensaje += `\\n\\n⚠️ _Nota: La respuesta fue truncada. Algunas sesiones pueden estar incompletas._`;\n}\n\nconst fuentes = [...new Set((datos.fuentes || []).map(f => `\\`${f.archivo} p.${f.pagina}\\``))];\nif (fuentes.length > 0) {\n  mensaje += `\\n\\n📚 Basado en: ${fuentes.join(\" · \")}`;\n}\n\nreturn [{\n  json: {\n    chat_id: datos.chat_id,\n    mensaje: mensaje,\n    datos_plan: {\n      nivel: datos.nivel,\n      prerequisitos: datos.prerequisitos,\n      sesiones: sesiones\n    }\n  }\n}];\n"
       },
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
@@ -781,14 +781,14 @@
     {
       "parameters": {
         "content": "## Enviar respuestas a Telegram",
-        "height": 672,
+        "height": 864,
         "width": 432
       },
       "type": "n8n-nodes-base.stickyNote",
       "typeVersion": 1,
       "position": [
         5968,
-        -448
+        -640
       ],
       "id": "c4211ddc-749e-4bc6-bf0f-65f882b1e56e",
       "name": "Sticky Note6"
@@ -1070,6 +1070,55 @@
       ],
       "id": "3a1a7fc9-f769-4f0a-bd35-927da1ddfeec",
       "name": "Sticky Note7"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://latex-renderer:5001/plan",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.datos_plan) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        5600,
+        -560
+      ],
+      "id": "c1080c7c-c706-4d65-8f81-0f761746e574",
+      "name": "Generar PDF Plan",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "operation": "sendDocument",
+        "chatId": "={{ $('Formato Plan').first().json.chat_id }}",
+        "binaryData": true,
+        "additionalFields": {
+          "caption": "📚 Plan de clases",
+          "fileName": "plan.pdf"
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        6000,
+        -560
+      ],
+      "id": "1fd5f3d5-a102-41fa-b312-2bbb496b42c8",
+      "name": "Enviar PDF Plan",
+      "onError": "continueRegularOutput"
     }
   ],
   "connections": {
@@ -1342,6 +1391,11 @@
       "main": [
         [
           {
+            "node": "Generar PDF Plan",
+            "type": "main",
+            "index": 0
+          },
+          {
             "node": "Unir Respuestas",
             "type": "main",
             "index": 0
@@ -1601,6 +1655,22 @@
             "index": 0
           }
         ]
+      ]
+    },
+    "Generar PDF Plan": {
+      "main": [
+        [
+          {
+            "node": "Enviar PDF Plan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Enviar PDF Plan": {
+      "main": [
+        []
       ]
     }
   },

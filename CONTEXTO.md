@@ -12,7 +12,7 @@ en español, con pedidos rápidos y sueltos (sin memoria de conversación).
 
 | Tarea | Salida |
 |---|---|
-| `plan_de_clases` | Plan de sesiones en Telegram, con las fuentes usadas |
+| `plan_de_clases` | Resumen corto en Telegram (sesiones y fuentes) y PDF con el plan completo |
 | `banco_de_ejercicios` | Resumen en Telegram, con fuentes, y PDF compilado con LaTeX |
 | `planificar_clase` | Evento en Google Calendar con enlace de Meet |
 | `aclarar` | Pregunta breve de vuelta |
@@ -31,7 +31,7 @@ Polling Timer (5 s) → getUpdates (limit=1) → Procesar Updates → Confirmar 
                   ├ 📝 Ejercicios ┼→ Llamar Ollama → Parsear Respuesta LLM → Router de Tareas
                   ├ 📅 Agendador ─┘
                   └ aclarar → Formato Aclarar
-  Router de Tareas → Formato Plan | Formato Ejercicios (+ Generar PDF → Enviar PDF)
+  Router de Tareas → Formato Plan (+ Generar PDF Plan → Enviar PDF Plan) | Formato Ejercicios (+ Generar PDF → Enviar PDF)
                    | Validar Datos Clase → Google Calendar | Formato Error
   → Unir Respuestas → Dividir Mensaje Largo (4000) → Enviar Respuesta (Markdown)
 ```
@@ -57,7 +57,7 @@ Polling Timer (5 s) → getUpdates (limit=1) → Procesar Updates → Confirmar 
 |---|---|---|
 | n8n | 5678 | lee `.env`, TZ America/Bogota, `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, datos en `n8n-data/` |
 | chromadb | 8000 | colección `tutorias` (bge-m3, 1024 dims, coseno), en `chroma-data/` |
-| latex-renderer | 5001 | Flask + Tectonic (traído de v2). `POST /render {nivel, temas[]}` → PDF; si la matemática no compila, reintenta con ella como texto. Dificultad desconocida → "Media" |
+| latex-renderer | 5001 | Flask + Tectonic (traído de v2). `POST /render {nivel, temas[]}` → PDF de ejercicios; `POST /plan {nivel, prerequisitos, sesiones[]}` → PDF del plan. Si la matemática no compila, reintenta con ella como texto. Dificultad desconocida → "Media"; letras griegas sueltas (λ, σ…) se pasan a comandos LaTeX porque la fuente no las trae |
 | Ollama | 11434 (host) | `qwen3:14b`, `bge-m3` |
 
 `.env`: `TELEGRAM_BOT_TOKEN`, `GOOGLE_CALENDAR_ID`, `COLECCION=tutorias`, `LLM_MODEL=qwen3:14b`.
