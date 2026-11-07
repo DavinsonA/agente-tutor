@@ -5,6 +5,7 @@ data/
 n8n-data/
 chroma-data/
 *.pdf
+.vscode/
 
 .claude/
 CLAUDE.md
